@@ -90,6 +90,15 @@ function errorFromResponse(status: number, body: unknown): ApiError {
   return new ApiError(message, status, typeof payload.code === 'string' ? payload.code : undefined);
 }
 
+/**
+ * Endereço completo de um arquivo servido pela API (ex.: foto enviada pelo médico,
+ * que chega como "/public/professionals/:id/photo?v=..."). Fotos que já vêm com
+ * o site ("/assets/...") ficam como estão.
+ */
+export function apiAssetUrl(path: string): string {
+  return path.startsWith('/public/') ? `${API_BASE}${path}` : path;
+}
+
 async function responseBody(response: Response): Promise<unknown> {
   if (response.status === 204) return undefined;
 

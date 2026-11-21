@@ -73,6 +73,11 @@ export const appointmentStatusLabel: Record<AppointmentStatus, string> = {
   COMPLETED: 'Concluída',
 };
 
+/** Status do cadastro do médico: "Em análise" só depois de enviar para análise. */
+export function professionalStatusLabel(status: VerificationStatus, submittedAt: string | null | undefined) {
+  return status === 'PENDING' && !submittedAt ? 'Cadastro incompleto' : verificationLabel[status];
+}
+
 export const verificationLabel: Record<VerificationStatus, string> = {
   PENDING: 'Em análise',
   APPROVED: 'Aprovado',

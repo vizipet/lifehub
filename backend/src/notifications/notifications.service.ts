@@ -146,6 +146,8 @@ async markAllAsRead(userId: string) {
               userId: true,
             },
           },
+          patient: { select: { name: true } },
+          slot: { select: { startsAt: true } },
         },
       });
 
@@ -167,7 +169,7 @@ async markAllAsRead(userId: string) {
       content.userId,
     ].join(':');
 
-    return this.prisma.notification.upsert({
+    const created = await this.prisma.notification.upsert({
       where: {
         deduplicationKey,
       },
@@ -180,6 +182,37 @@ async markAllAsRead(userId: string) {
         deduplicationKey,
       },
     });
+
+    // O médico também fica sabendo de cada consulta nova na agenda dele.
+    if (event.type === 'APPOINTMENT_CONFIRMED' && appointment.professional?.userId) {
+      const when = appointment.slot?.startsAt
+        ? appointment.slot.startsAt.toLocaleString('pt-BR', {
+            timeZone: 'America/Recife',
+            weekday: 'long',
+            day: '2-digit',
+            month: '2-digit',
+            hour: '2-digit',
+            minute: '2-digit',
+          })
+        : null;
+      const professionalKey = [event.type, event.id, appointment.professional.userId].join(':');
+      await this.prisma.notification.upsert({
+        where: { deduplicationKey: professionalKey },
+        update: {},
+        create: {
+          userId: appointment.professional.userId,
+          type: 'APPOINTMENT_BOOKED_FOR_PROFESSIONAL',
+          title: 'Nova consulta na sua agenda',
+          message:
+            `${appointment.patient?.name ?? 'Um paciente'} agendou ${appointment.serviceNameSnapshot}` +
+            (when ? ` para ${when}` : '') +
+            ` em ${appointment.clinicNameSnapshot}.`,
+          deduplicationKey: professionalKey,
+        },
+      });
+    }
+
+    return created;
   }
 
   private buildNotificationContent(

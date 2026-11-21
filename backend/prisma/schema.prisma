@@ -183,6 +183,11 @@ model Professional {
   bio                     String?            @db.VarChar(600)
   /// Caminho da foto pública (ex.: /assets/photos/medicos/helena.jpg).
   photoUrl                String?            @map("photo_url") @db.VarChar(300)
+  /// Foto enviada pelo próprio médico (arquivo criptografado no storage).
+  /// Tem prioridade sobre photoUrl, que só guarda as fotos da demonstração.
+  photoStoragePath        String?            @map("photo_storage_path") @db.VarChar(300)
+  photoMimeType           String?            @map("photo_mime_type") @db.VarChar(40)
+  photoUpdatedAt          DateTime?          @map("photo_updated_at") @db.Timestamptz(6)
   verificationStatus      VerificationStatus @default(PENDING) @map("verification_status")
   verificationSubmittedAt DateTime?          @map("verification_submitted_at") @db.Timestamptz(6)
   createdAt               DateTime           @default(now()) @map("created_at") @db.Timestamptz(6)
@@ -218,6 +223,8 @@ model Clinic {
   latitude                           Float?
   longitude                          Float?
   verificationStatus                 VerificationStatus @default(PENDING) @map("verification_status")
+  /// Último recado da administração sobre o local (motivo de correção, rejeição ou suspensão).
+  verificationNote                   String?            @map("verification_note") @db.VarChar(2000)
   technicalResponsibleProfessionalId String?            @map("technical_responsible_professional_id") @db.Uuid
   createdAt                          DateTime           @default(now()) @map("created_at") @db.Timestamptz(6)
   updatedAt                          DateTime           @updatedAt @map("updated_at") @db.Timestamptz(6)

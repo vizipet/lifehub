@@ -23,6 +23,7 @@ import type { AuthenticatedUser } from '../auth/types/authenticated-user';
 import { CreateProfessionalDto } from './create-professional.dto';
 import { UpdateProfessionalDto } from './update-professional.dto';
 import { ProfessionalsService } from './professionals.service';
+import { professionalPhotoUrl } from './professional-photo';
 
 @ApiTags('Professionals')
 @ApiBearerAuth()
@@ -50,9 +51,13 @@ export class ProfessionalsController {
   ) {
     const professional =
       await this.professionalsService.findMine(user.id);
+    // O caminho do arquivo é interno; a tela recebe só o endereço da foto.
+    const { photoStoragePath, photoMimeType, ...rest } = professional;
+    void photoStoragePath;
+    void photoMimeType;
 
     return {
-      data: professional,
+      data: { ...rest, photoUrl: professionalPhotoUrl(professional) },
     };
   }
 

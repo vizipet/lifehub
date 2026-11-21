@@ -26,7 +26,7 @@ describe('PrivacyService', () => {
     availabilitySlot: { updateMany: jest.fn() },
     professional: { findUnique: jest.fn(), update: jest.fn() },
     patient: { updateMany: jest.fn() },
-    notification: { deleteMany: jest.fn() },
+    notification: { deleteMany: jest.fn(), createMany: jest.fn() },
     passwordResetToken: { deleteMany: jest.fn() },
     idempotencyKey: { deleteMany: jest.fn() },
     notificationPreference: { deleteMany: jest.fn() },
@@ -269,14 +269,27 @@ describe('PrivacyService', () => {
     prisma.user.findUnique.mockResolvedValue({ id: 'user-id', passwordHash: 'hash' });
     passwordHashService.verify.mockResolvedValue(true);
     tx.privacyRequest.create.mockResolvedValue({ id: 'privacy-request-id' });
-    tx.appointment.findMany.mockResolvedValueOnce([]).mockResolvedValueOnce([{ id: 'booked-id' }]);
+    tx.appointment.findMany.mockResolvedValueOnce([]).mockResolvedValueOnce([
+      {
+        id: 'booked-id',
+        holderId: 'patient-user-id',
+        serviceNameSnapshot: 'Consulta',
+        clinicNameSnapshot: 'Clínica Central',
+        slot: { startsAt: new Date('2030-01-10T12:00:00Z') },
+      },
+    ]);
     tx.professional.findUnique.mockResolvedValue({ id: 'professional-id' });
 
     await service.requestAccountDeletion('user-id', 'senha-correta');
 
     expect(tx.professional.update).toHaveBeenCalledWith({
       where: { id: 'professional-id' },
-      data: { verificationStatus: 'SUSPENDED', bio: null },
+      data: expect.objectContaining({ verificationStatus: 'SUSPENDED', bio: null, photoStoragePath: null }),
+    });
+    // O paciente é avisado do cancelamento.
+    expect(tx.notification.createMany.mock.calls[0][0].data[0]).toMatchObject({
+      userId: 'patient-user-id',
+      title: 'Consulta cancelada',
     });
     expect(tx.appointment.updateMany).toHaveBeenCalledWith({
       where: { id: { in: ['booked-id'] } },

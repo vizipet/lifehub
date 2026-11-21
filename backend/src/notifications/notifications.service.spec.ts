@@ -151,17 +151,27 @@ describe('NotificationsService', () => {
     await service.createFromOutboxEvent(event);
     await service.createFromOutboxEvent(event);
 
-    const firstCall =
-      notificationUpsert.mock.calls[0][0];
-
-    const secondCall =
-      notificationUpsert.mock.calls[1][0];
-
-    expect(
-      firstCall.where.deduplicationKey,
-    ).toBe(
-      secondCall.where.deduplicationKey,
+    // Cada processamento avisa o paciente e o médico (2 notificações).
+    const keys = notificationUpsert.mock.calls.map(
+      ([args]) => args.where.deduplicationKey,
     );
+    expect(keys).toHaveLength(4);
+    expect(keys[0]).toBe(keys[2]);
+    expect(keys[1]).toBe(keys[3]);
+  });
+
+  it('avisa o médico de cada consulta nova na agenda dele', async () => {
+    await service.createFromOutboxEvent({
+      id: '77777777-7777-4777-8777-777777777777',
+      type: 'APPOINTMENT_CONFIRMED',
+      payload: { appointmentId: appointment.id },
+    });
+
+    expect(notificationUpsert.mock.calls[1][0].create).toMatchObject({
+      userId: appointment.professional.userId,
+      type: 'APPOINTMENT_BOOKED_FOR_PROFESSIONAL',
+      title: 'Nova consulta na sua agenda',
+    });
   });
 
   it('rejeita tipo de evento não suportado', async () => {

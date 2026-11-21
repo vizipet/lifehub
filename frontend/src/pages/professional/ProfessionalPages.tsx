@@ -3,17 +3,33 @@ import { Building2, CalendarDays, CheckCircle2, Circle, FileUp, Pencil, Send, Sh
 import { Link } from 'react-router-dom';
 import { jsonBody, messageOf, request } from '../../api';
 import { useAuth } from '../../lib/auth';
-import { dateLong, firstName, onlyDigits, modalityLabel, relationshipLabel, time, verificationLabel } from '../../lib/format';
+import { dateLong, firstName, onlyDigits, modalityLabel, professionalStatusLabel, relationshipLabel, time, verificationLabel } from '../../lib/format';
 import type { Appointment, Clinic, Specialty, VerificationStatus } from '../../lib/types';
 import { useApi } from '../../lib/useApi';
 import { EmptyState, Field, Modal, Notice, PageHeader, SelectField, SkeletonCards, SkeletonPage, StatusPill, TextArea, Tooltip } from '../../ui/kit';
 import { useProfessional } from './useProfessional';
+import { ProfilePhoto } from './ProfilePhoto';
 import { CARD_LEAVE_MS } from '../patient/AppointmentsPage';
 
 const UFS = ['AC', 'AL', 'AP', 'AM', 'BA', 'CE', 'DF', 'ES', 'GO', 'MA', 'MT', 'MS', 'MG', 'PA', 'PB', 'PR', 'PE', 'PI', 'RJ', 'RN', 'RS', 'RO', 'RR', 'SC', 'SP', 'SE', 'TO'];
 
 export function verificationTone(status: VerificationStatus) {
   return status === 'APPROVED' ? 'green' : status === 'PENDING' ? 'yellow' : status === 'CHANGES_REQUESTED' ? 'blue' : 'red';
+}
+
+const AGENDA_VIEWS = [
+  { value: 'open', label: 'Em aberto' },
+  { value: 'past', label: 'Histórico' },
+  { value: 'cancelled', label: 'Cancelados' },
+] as const;
+
+function appointmentStatusForDoctor(status: Appointment['status']) {
+  return {
+    CONFIRMED: 'Não concluído',
+    COMPLETED: 'Concluído',
+    CANCELLED_BY_PATIENT: 'Cancelado pelo paciente',
+    CANCELLED_BY_PROVIDER: 'Cancelado por você',
+  }[status];
 }
 
 const MODAL_TITLES = {
@@ -32,7 +48,9 @@ export function ProfessionalDashboard() {
   const { user } = useAuth();
   const pro = useProfessional();
   // "Em aberto": confirmadas ainda não concluídas, inclusive as que já começaram.
-  const agenda = useApi<{ data: Appointment[] }>(pro.profile ? '/appointments?view=open' : null);
+  // "Em aberto": confirmadas ainda não concluídas, inclusive as que já começaram.
+  const [agendaView, setAgendaView] = useState<'open' | 'past' | 'cancelled'>('open');
+  const agenda = useApi<{ data: Appointment[] }>(pro.profile ? `/appointments?view=${agendaView}` : null);
   const [target, setTarget] = useState<{ appointment: Appointment; action: 'complete' | 'cancel' | 'confirmLink' | 'mismatch' } | null>(null);
   const [reason, setReason] = useState('');
   const [error, setError] = useState('');
@@ -93,7 +111,7 @@ export function ProfessionalDashboard() {
           Informe CRM e especialidade para começar. <Link to="/medico/cadastro" className="font-semibold underline">Continuar cadastro</Link>
         </Notice>
       ) : !approved ? (
-        <Notice kind={pro.profile.verificationStatus === 'REJECTED' ? 'error' : 'info'} title={`Cadastro: ${verificationLabel[pro.profile.verificationStatus]}`}>
+        <Notice kind={pro.profile.verificationStatus === 'REJECTED' ? 'error' : 'info'} title={`Cadastro: ${professionalStatusLabel(pro.profile.verificationStatus, pro.profile.verificationSubmittedAt)}`}>
           {pro.profile.verificationSubmittedAt
             ? 'A equipe LifeHub está analisando seus documentos. Você será avisado por notificação.'
             : 'Envie seus documentos para análise. Enquanto não for aprovado, você não aparece na busca.'}{' '}
@@ -113,7 +131,22 @@ export function ProfessionalDashboard() {
 
       {pro.profile && (
         <section>
-          <h2 className="mb-3 text-xl font-extrabold">Atendimentos em aberto</h2>
+          <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
+            <h2 className="text-xl font-extrabold">Atendimentos</h2>
+            <div className="flex flex-wrap gap-2" role="tablist" aria-label="Filtro dos atendimentos">
+              {AGENDA_VIEWS.map((item) => (
+                <button
+                  key={item.value}
+                  role="tab"
+                  aria-selected={agendaView === item.value}
+                  className={`chip ${agendaView === item.value ? 'chip-active' : ''}`}
+                  onClick={() => setAgendaView(item.value)}
+                >
+                  {item.label}
+                </button>
+              ))}
+            </div>
+          </div>
           {agenda.loading ? (
             <SkeletonCards count={3} lines={3} action label="Carregando atendimentos..." />
           ) : agenda.data?.data.length ? (
@@ -131,6 +164,11 @@ export function ProfessionalDashboard() {
                     </p>
                     <p className="text-sm text-muted">{dateLong(item.slot.startsAt)} · {item.clinicNameSnapshot}</p>
                   </div>
+                  {agendaView !== 'open' ? (
+                    <StatusPill tone={item.status === 'COMPLETED' ? 'green' : item.status === 'CONFIRMED' ? 'yellow' : 'gray'}>
+                      {appointmentStatusForDoctor(item.status)}
+                    </StatusPill>
+                  ) : (
                   <div className="flex gap-2">
                     {needsLinkCheck(item) ? (
                       <Tooltip text="Confira o vínculo do dependente antes.">
@@ -145,7 +183,11 @@ export function ProfessionalDashboard() {
                       <button className="btn btn-ghost text-danger" onClick={() => { setError(''); setReason(''); setTarget({ appointment: item, action: 'cancel' }); }}>Cancelar</button>
                     </Tooltip>
                   </div>
-                  {item.patient.guardianName && (
+                  )}
+                  {agendaView !== 'open' && item.cancellationReason && (
+                    <p className="w-full text-sm text-muted">Motivo: {item.cancellationReason}</p>
+                  )}
+                  {agendaView === 'open' && item.patient.guardianName && (
                     item.dependentCheckResult === 'CONFIRMED' ? (
                       <p className="flex w-full items-center gap-1 text-sm text-success">
                         <ShieldCheck className="size-4" aria-hidden /> Vínculo conferido: {relationshipLabel[item.patient.relationship].toLowerCase()} de {item.patient.guardianName}.
@@ -172,7 +214,9 @@ export function ProfessionalDashboard() {
               ))}
             </ul>
           ) : (
-            <EmptyState icon={<CalendarDays className="size-7" />} title="Nenhum atendimento marcado">Quando um paciente agendar, a consulta aparece aqui.</EmptyState>
+            <EmptyState icon={<CalendarDays className="size-7" />} title={agendaView === 'open' ? 'Nenhum atendimento marcado' : 'Nada por aqui ainda'}>
+              {agendaView === 'open' ? 'Quando um paciente agendar, a consulta aparece aqui.' : 'Os atendimentos aparecem aqui depois que passam ou são cancelados.'}
+            </EmptyState>
           )}
         </section>
       )}
@@ -244,6 +288,7 @@ function Step({ done, title, children }: { done: boolean; title: string; childre
 }
 
 export function ProfessionalSetupPage() {
+  const { user } = useAuth();
   const pro = useProfessional();
   const specialties = useApi<{ data: Specialty[] }>('/specialties', false);
   const [profileForm, setProfileForm] = useState<{ crm: string; crmState: string; specialtyId: string; bio: string } | null>(null);
@@ -251,7 +296,9 @@ export function ProfessionalSetupPage() {
   const [editing, setEditing] = useState<Clinic | null>(null);
   const [editForm, setEditForm] = useState({ cnes: '', cep: '', name: '', address: '', neighborhood: '', city: '' });
   const [editError, setEditError] = useState('');
-  const [uploaded, setUploaded] = useState<string[]>([]);
+  const documents = useApi<{ data: { id: string; originalName: string; sizeBytes: number; createdAt: string }[] }>(
+    pro.profile ? '/verification/documents' : null,
+  );
   const [message, setMessage] = useState('');
   const [error, setError] = useState('');
   const [busy, setBusy] = useState(false);
@@ -366,7 +413,7 @@ export function ProfessionalSetupPage() {
     const data = new FormData();
     data.append('file', file);
     await run(() => request('/verification/documents', { method: 'POST', body: data }), `Documento "${file.name}" enviado com segurança.`);
-    setUploaded((list) => [...list, file.name]);
+    documents.reload({ quiet: true });
   }
 
   if (pro.loading) return <SkeletonPage />;
@@ -376,13 +423,28 @@ export function ProfessionalSetupPage() {
       <PageHeader
         title="Cadastro profissional"
         subtitle="Só médicos com CRM verificado aparecem para os pacientes."
-        action={status && <StatusPill tone={verificationTone(status)}>{verificationLabel[status]}</StatusPill>}
+        action={
+          status && (
+            <StatusPill tone={status === 'PENDING' && !pro.profile?.verificationSubmittedAt ? 'gray' : verificationTone(status)}>
+              {professionalStatusLabel(status, pro.profile?.verificationSubmittedAt)}
+            </StatusPill>
+          )
+        }
       />
       {message && <Notice kind="success">{message}</Notice>}
       {error && <Notice kind="error">{error}</Notice>}
       {status === 'CHANGES_REQUESTED' && <Notice kind="warning">A equipe pediu correções. Confira suas notificações, ajuste os dados e envie de novo.</Notice>}
 
-      <Step done={Boolean(pro.profile?.crm)} title="1. CRM e especialidade">
+      <Step done={Boolean(pro.profile?.crm)} title="1. Foto, CRM e especialidade">
+        <ProfilePhoto
+          name={user?.name ?? ''}
+          photoUrl={pro.profile?.photoUrl ?? null}
+          enabled={Boolean(pro.profile)}
+          onChanged={() => {
+            setMessage('Foto atualizada.');
+            pro.reload();
+          }}
+        />
         <form className="space-y-4" onSubmit={saveProfile}>
           <div className="grid gap-4 sm:grid-cols-[1fr_8rem]">
             <Field label="Número do CRM" inputMode="numeric" required pattern="\d{4,8}" value={current.crm} onChange={(e) => setProfileForm({ ...current, crm: e.target.value.replace(/\D/g, '') })} />
@@ -408,6 +470,11 @@ export function ProfessionalSetupPage() {
                 <span>
                   <strong>{clinic.name}</strong>
                   <span className="block text-sm text-muted">{clinic.address}, {clinic.neighborhood}, {clinic.city}</span>
+                  {clinic.verificationNote && ['CHANGES_REQUESTED', 'REJECTED', 'SUSPENDED'].includes(clinic.verificationStatus) && (
+                    <span className="mt-1 block rounded-md border border-warning/40 bg-warning/10 px-2 py-1 text-sm">
+                      <strong>Recado da administração:</strong> {clinic.verificationNote}
+                    </span>
+                  )}
                   {clinic.cnes ? (
                     <span className="block text-sm text-muted">CNES {clinic.cnes}</span>
                   ) : (
@@ -514,13 +581,23 @@ export function ProfessionalSetupPage() {
         )}
       </Modal>
 
-      <Step done={uploaded.length > 0 || Boolean(pro.profile?.verificationSubmittedAt)} title="3. Documentos">
+      <Step done={Boolean(documents.data?.data.length) || Boolean(pro.profile?.verificationSubmittedAt)} title="3. Documentos">
         <p className="mb-3 text-muted">O alvará do local vai pelo botão Documento, na etapa 2. Aqui, envie a carteira do CRM e um documento com foto (PDF, JPG ou PNG, até 10 MB). Os arquivos ficam criptografados e só a equipe de verificação acessa.</p>
         <label className={`btn btn-secondary ${!pro.profile ? 'pointer-events-none opacity-50' : ''}`}>
           <FileUp className="size-5" /> Escolher arquivo
           <input type="file" accept="application/pdf,image/jpeg,image/png" className="sr-only" disabled={!pro.profile || busy} onChange={(e) => { void upload(e.target.files?.[0]); e.target.value = ''; }} />
         </label>
-        {uploaded.length > 0 && <ul className="mt-3 list-disc pl-5 text-sm">{uploaded.map((name, i) => <li key={`${name}-${i}`}>{name}</li>)}</ul>}
+        {documents.data?.data.length ? (
+          <ul className="mt-3 space-y-1 text-sm">
+            {documents.data.data.map((doc) => (
+              <li key={doc.id} className="flex items-center gap-2">
+                <CheckCircle2 className="size-4 shrink-0 text-success" aria-hidden />
+                <span className="min-w-0 truncate">{doc.originalName}</span>
+                <span className="shrink-0 text-muted">· {Math.ceil(doc.sizeBytes / 1024)} KB · {dateLong(doc.createdAt).split(',')[0]}</span>
+              </li>
+            ))}
+          </ul>
+        ) : null}
       </Step>
 
       <Step done={Boolean(pro.profile?.verificationSubmittedAt) && status !== 'CHANGES_REQUESTED'} title="4. Enviar para análise">

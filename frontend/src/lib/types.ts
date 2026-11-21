@@ -136,6 +136,7 @@ export interface ProfessionalProfile {
   crm: string | null;
   crmState: string | null;
   bio: string | null;
+  photoUrl: string | null;
   specialtyId: string | null;
   specialty: { id: string; code: string; name: string } | null;
   verificationStatus: VerificationStatus;
@@ -155,4 +156,5 @@ export interface Clinic {
   verificationStatus: VerificationStatus;
   technicalResponsibleProfessionalId: string | null;
   _count?: { documents: number };
+  verificationNote: string | null;
 }

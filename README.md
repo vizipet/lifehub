@@ -34,7 +34,7 @@ Documentação da API (Swagger): http://localhost:3000/api/docs
 ## O que dá para fazer
 
 - **Paciente:** cadastro com CPF e consentimentos da LGPD; busca com **sugestões enquanto digita** (especialidades e médicos), filtros por dia e modalidade, ordenada pelo **horário mais próximo**; perfil do médico com foto, **mapa da clínica** e escolha do dia numa faixa deslizante; agendamento para si ou para dependentes; cancelamento com motivo; campanhas de saúde; notificações; exportar os próprios dados e excluir a conta.
-- **Médico:** cadastro com CRM e especialidade; local de atendimento com **CNES**, **CEP que preenche o endereço** e envio do **alvará**; documentos de verificação; serviços (presencial e teleconsulta); abertura de horários em lote e bloqueio; agenda com concluir e cancelar; **conferência do vínculo** quando o paciente é dependente.
+- **Médico:** cadastro com **foto de perfil**, CRM e especialidade; local de atendimento com **CNES**, **CEP que preenche o endereço** e envio do **alvará**; documentos de verificação; serviços (presencial e teleconsulta); abertura de horários em lote e bloqueio; agenda com concluir e cancelar, histórico e cancelados; **conferência do vínculo** quando o paciente é dependente; notificações de consulta nova, cancelamento e decisões da administração (com o motivo).
 - **Administração:** análise de médicos (com documentos); aprovação de clínicas com conferência no CNES/DATASUS e no alvará; **alertas de dependentes**; bloqueio de usuários; campanhas; registro de auditoria de tudo o que os médicos fazem.
 
 ### Proteção de dependentes

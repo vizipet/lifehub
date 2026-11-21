@@ -19,7 +19,7 @@ function contentSecurityPolicy(): Plugin {
         "script-src 'self'",
         "style-src 'self' 'unsafe-inline'",
         "font-src 'self'",
-        "img-src 'self' data: blob:",
+        `img-src 'self' data: blob: ${apiOrigins}`,
         `connect-src 'self' ${apiOrigins} https://viacep.com.br`,
         "frame-src https://www.openstreetmap.org",
         "object-src 'none'",

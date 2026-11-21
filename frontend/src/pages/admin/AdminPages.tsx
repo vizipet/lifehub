@@ -17,7 +17,7 @@ import { fetchBlob, jsonBody, messageOf, request, type Paginated } from '../../a
 import { dateShort, dateTime, relationshipLabel, verificationLabel } from '../../lib/format';
 import type { Campaign, Relationship, VerificationStatus } from '../../lib/types';
 import { useApi } from '../../lib/useApi';
-import { Checkbox, EmptyState, Field, Modal, Notice, PageHeader, SelectField, SkeletonCards, SkeletonStats, StatusPill, TextArea } from '../../ui/kit';
+import { Avatar, Checkbox, EmptyState, Field, Modal, Notice, PageHeader, SelectField, SkeletonCards, SkeletonStats, StatusPill, TextArea } from '../../ui/kit';
 import { verificationTone } from '../professional/ProfessionalPages';
 
 interface Overview {
@@ -99,6 +99,7 @@ interface PendingProfessional {
   verificationStatus: VerificationStatus;
   verificationSubmittedAt: string;
   user: { id: string; name: string };
+  photoUrl: string | null;
 }
 
 interface VerificationDoc {
@@ -164,6 +165,7 @@ export function AdminProfessionalsPage() {
         <ul className="space-y-2">
           {queue.data.data.map((item) => (
             <li key={item.id} className="card flex flex-wrap items-center gap-3">
+              <Avatar name={item.user.name} photoUrl={item.photoUrl} />
               <div className="flex-1">
                 <strong>{item.user.name}</strong>
                 <p className="text-sm text-muted">{item.specialty?.name ?? 'Sem especialidade'} · CRM {item.crm}/{item.crmState} · enviado em {dateShort(item.verificationSubmittedAt)}</p>

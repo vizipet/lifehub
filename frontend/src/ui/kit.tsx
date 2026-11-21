@@ -10,6 +10,7 @@ import {
   useId,
   useRef,
 } from 'react';
+import { apiAssetUrl } from '../api';
 import { AlertTriangle, CheckCircle2, Info, Loader2, Phone, X } from 'lucide-react';
 import { Link } from 'react-router-dom';
 import { initials } from '../lib/format';
@@ -265,11 +266,17 @@ export function Avatar({
 }) {
   const box = size === 'lg' ? 'size-24 rounded-xl' : 'size-14 rounded-lg';
   if (photoUrl) {
-    // Foto ilustrativa: o nome vem ao lado, então a imagem é decorativa.
+    // Fotos da demonstração são de meio corpo: aproxima no rosto. A foto enviada
+    // pelo médico já chega recortada no rosto, então aparece inteira.
+    const uploaded = photoUrl.startsWith('/public/');
     return (
       <div className={`${box} shrink-0 overflow-hidden border border-line bg-soft`}>
-        {/* Retratos de meio corpo: aproxima no rosto, que fica no terço de cima. */}
-        <img src={photoUrl} alt="" loading="lazy" className="h-full w-full origin-[50%_10%] scale-[1.7] object-cover object-top" />
+        <img
+          src={apiAssetUrl(photoUrl)}
+          alt=""
+          loading="lazy"
+          className={uploaded ? 'h-full w-full object-cover' : 'h-full w-full origin-[50%_10%] scale-[1.7] object-cover object-top'}
+        />
       </div>
     );
   }

@@ -395,7 +395,8 @@ export class PrivacyService {
     if (professional) {
       await tx.professional.update({
         where: { id: professional.id },
-        data: { verificationStatus: 'SUSPENDED', bio: null },
+        // A foto sai junto com os outros dados pessoais.
+        data: { verificationStatus: 'SUSPENDED', bio: null, photoUrl: null, photoStoragePath: null, photoMimeType: null, photoUpdatedAt: now },
       });
       const booked = await tx.appointment.findMany({
         where: {
@@ -403,7 +404,7 @@ export class PrivacyService {
           status: AppointmentStatus.CONFIRMED,
           slot: { startsAt: { gt: now } },
         },
-        select: { id: true },
+        select: { id: true, holderId: true, serviceNameSnapshot: true, clinicNameSnapshot: true, slot: { select: { startsAt: true } } },
       });
       await tx.appointment.updateMany({
         where: { id: { in: booked.map((item) => item.id) } },
@@ -413,6 +414,22 @@ export class PrivacyService {
           cancellationReason: 'O médico encerrou a conta no LifeHub.',
         },
       });
+      // Cada paciente fica sabendo que a consulta foi cancelada e pode remarcar com outro médico.
+      if (booked.length) {
+        await tx.notification.createMany({
+          data: booked.map((item) => ({
+            userId: item.holderId,
+            type: 'APPOINTMENT_CANCELLED',
+            title: 'Consulta cancelada',
+            message:
+              `Sua consulta de ${item.serviceNameSnapshot} em ${item.clinicNameSnapshot}, marcada para ` +
+              item.slot.startsAt.toLocaleString('pt-BR', { timeZone: 'America/Recife', day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' }) +
+              ', foi cancelada porque o médico encerrou a conta no LifeHub. Você pode agendar com outro médico.',
+            deduplicationKey: `PROFESSIONAL_ACCOUNT_DELETED:${item.id}`,
+          })),
+          skipDuplicates: true,
+        });
+      }
       await tx.availabilitySlot.updateMany({
         where: { professionalId: professional.id, startsAt: { gt: now } },
         data: { status: 'BLOCKED' },

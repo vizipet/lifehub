@@ -6,6 +6,7 @@ import {
   UploadedFile,
   UseGuards,
   UseInterceptors,
+  Get,
 } from '@nestjs/common';
 import { FileInterceptor } from '@nestjs/platform-express';
 import {
@@ -85,6 +86,12 @@ export class VerificationController {
     return {
       data: document,
     };
+  }
+
+  @Get('documents')
+  @ApiOperation({ summary: 'Listar os documentos que eu já enviei (sem o arquivo)' })
+  async listDocuments(@CurrentUser() user: AuthenticatedUser) {
+    return { data: await this.verificationService.listMyDocuments(user.id) };
   }
 
   @Post('submit')

@@ -1,3 +1,4 @@
+import { professionalPhotoUrl } from '../professionals/professional-photo';
 import { BadRequestException, ForbiddenException, Injectable, NotFoundException } from '@nestjs/common';
 import { PrismaService } from '../common/prisma/prisma.service';
 import { UserRole, UserStatus, VerificationStatus } from '../generated/prisma/client';
@@ -50,6 +51,7 @@ export class AdminVerificationQueriesService {
         select: {
           id: true, crm: true, crmState: true, specialty: { select: { name: true } },
           verificationStatus: true, verificationSubmittedAt: true,
+          photoUrl: true, photoStoragePath: true, photoUpdatedAt: true,
           user: { select: { id: true, name: true } },
         },
         orderBy: [{ verificationSubmittedAt: 'asc' }, { id: 'asc' }],
@@ -57,7 +59,12 @@ export class AdminVerificationQueriesService {
       }),
       this.prisma.professional.count({ where }),
     ]);
-    return { data, meta: this.pagination(query, total) };
+    // O admin vê a foto que o médico escolheu junto com os documentos.
+    const rows = data.map(({ photoStoragePath, photoUpdatedAt, photoUrl, ...item }) => ({
+      ...item,
+      photoUrl: professionalPhotoUrl({ id: item.id, photoUrl, photoStoragePath, photoUpdatedAt }),
+    }));
+    return { data: rows, meta: this.pagination(query, total) };
   }
 
   async listProfessionalDocuments(actorId: string, professionalId: string, query: ListVerificationsQueryDto) {

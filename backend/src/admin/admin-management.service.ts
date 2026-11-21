@@ -345,11 +345,40 @@ export class AdminManagementService {
           message: 'Este local ainda não tem documento (alvará ou comprovante). Peça ao médico antes de aprovar.',
         });
       }
+      // O recado fica guardado no local (o médico vê no cadastro) e vira notificação.
       const updated = await tx.clinic.update({
         where: { id: clinicId },
-        data: { verificationStatus: dto.decision },
+        data: { verificationStatus: dto.decision, verificationNote: dto.reason?.trim() || null },
         select: { id: true, name: true, verificationStatus: true },
       });
+      const doctors = await tx.clinicProfessional.findMany({
+        where: { clinicId },
+        select: { professional: { select: { userId: true } } },
+      });
+      const title = {
+        APPROVED: 'Local de atendimento aprovado',
+        CHANGES_REQUESTED: 'Correção pedida no local de atendimento',
+        REJECTED: 'Local de atendimento recusado',
+        SUSPENDED: 'Local de atendimento suspenso',
+      }[dto.decision];
+      const stamp = Date.now();
+      if (doctors.length) {
+        await tx.notification.createMany({
+          data: doctors.map(({ professional }) => ({
+            userId: professional.userId,
+            type: `CLINIC_${dto.decision}`,
+            title,
+            message:
+              `${updated.name}: ` +
+              (dto.decision === 'APPROVED'
+                ? 'já pode receber agendamentos.'
+                : 'confira o recado da administração no seu cadastro.') +
+              (dto.reason?.trim() ? ` Motivo: ${dto.reason.trim()}` : ''),
+            deduplicationKey: `CLINIC_${dto.decision}:${clinicId}:${professional.userId}:${stamp}`,
+          })),
+          skipDuplicates: true,
+        });
+      }
       await this.audit.record(
         {
           actorId,

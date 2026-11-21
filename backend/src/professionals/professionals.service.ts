@@ -10,6 +10,7 @@ import { PrismaService } from '../common/prisma/prisma.service';
 import { AuditService } from '../audit/audit.service';
 import { CreateProfessionalDto } from './create-professional.dto';
 import { UpdateProfessionalDto } from './update-professional.dto';
+import { professionalPhotoUrl } from './professional-photo';
 
 const PROFILE_INCLUDE = {
   specialty: { select: { id: true, code: true, name: true } },
@@ -118,6 +119,8 @@ export class ProfessionalsService {
         crmState: true,
         bio: true,
         photoUrl: true,
+        photoStoragePath: true,
+        photoUpdatedAt: true,
         specialty: { select: { id: true, name: true } },
         user: { select: { name: true } },
         clinicLinks: {
@@ -165,7 +168,7 @@ export class ProfessionalsService {
       crm: professional.crm,
       crmState: professional.crmState,
       bio: professional.bio,
-      photoUrl: professional.photoUrl,
+      photoUrl: professionalPhotoUrl(professional),
       specialty: professional.specialty,
       clinics: professional.clinicLinks.map((link) => link.clinic),
       services: professional.serviceLinks.map((link) => link.service),

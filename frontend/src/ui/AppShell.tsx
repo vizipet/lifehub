@@ -93,7 +93,7 @@ export function AppShell({ children }: PropsWithChildren) {
           </nav>
           <div className="ml-auto flex items-center gap-1">
             <FontSizeButton />
-            {user?.role === 'PATIENT' && (
+            {user && user.role !== 'ADMIN' && (
               <NavLink to="/notificacoes" className="btn btn-ghost px-3" aria-label="Notificações">
                 <Bell className="size-5" />
               </NavLink>

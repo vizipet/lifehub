@@ -458,7 +458,11 @@ export class SearchService {
         spec.name AS "specialty",
         p.crm AS "crm",
         p.crm_state AS "crmState",
-        p.photo_url AS "photoUrl",
+        CASE
+          WHEN p.photo_storage_path IS NOT NULL
+            THEN '/public/professionals/' || p.id || '/photo?v=' || (EXTRACT(EPOCH FROM p.photo_updated_at) * 1000)::bigint
+          ELSE p.photo_url
+        END AS "photoUrl",
         next_slot.starts_at AS "nextAvailableAt",
         next_slot.id AS "nextSlotId",
         next_slot.service_id AS "nextServiceId",

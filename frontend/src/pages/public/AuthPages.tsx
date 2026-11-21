@@ -274,7 +274,16 @@ export function RegisterPage({ role }: { role: 'PATIENT' | 'PROFESSIONAL' }) {
             Li a <Link to="/privacidade" target="_blank" className="font-semibold text-primary underline">Política de Privacidade</Link> e entendo como meus dados são tratados.
           </Checkbox>
           <Checkbox checked={accept.health} onChange={(value) => setAccept((a) => ({ ...a, health: value }))} required>
-            Autorizo o uso dos meus dados de saúde (e dos meus dependentes) <strong>somente para agendar e gerenciar consultas</strong>, conforme o{' '}
+            {isDoctor ? (
+              <>
+                Li como o LifeHub trata dados de saúde e me comprometo a manter <strong>sigilo sobre os dados dos pacientes</strong> que eu
+                atender (Código de Ética Médica e LGPD), conforme o{' '}
+              </>
+            ) : (
+              <>
+                Autorizo o uso dos meus dados de saúde (e dos meus dependentes) <strong>somente para agendar e gerenciar consultas</strong>, conforme o{' '}
+              </>
+            )}
             <Link to="/consentimento-saude" target="_blank" className="font-semibold text-primary underline">termo de consentimento</Link>.
           </Checkbox>
         </fieldset>
