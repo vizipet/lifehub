@@ -7,7 +7,8 @@
     "setup": "node scripts/setup.mjs",
     "dev": "node scripts/dev.mjs",
     "test": "npm --prefix backend test && npm --prefix frontend test",
-    "reset-db": "node backend/scripts/db.mjs --reset"
+    "reset-db": "node backend/scripts/db.mjs --reset",
+    "stop-db": "node backend/scripts/db.mjs --stop"
   },
   "engines": {
     "node": ">=22"
