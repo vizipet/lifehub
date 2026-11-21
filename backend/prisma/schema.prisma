@@ -1,0 +1,665 @@
+generator client {
+  provider            = "prisma-client"
+  output              = "../src/generated/prisma"
+  importFileExtension = "js"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+// ---------------------------------------------------------------------------
+// Usuários e acesso
+// ---------------------------------------------------------------------------
+
+enum UserRole {
+  PATIENT
+  PROFESSIONAL
+  ADMIN
+}
+
+enum UserStatus {
+  ACTIVE
+  BLOCKED
+  DELETION_PENDING
+  DELETED
+}
+
+enum VerificationStatus {
+  PENDING
+  APPROVED
+  CHANGES_REQUESTED
+  REJECTED
+  SUSPENDED
+}
+
+/// Conta de acesso. O CPF nunca é guardado em texto puro:
+/// `cpfHash` (HMAC-SHA256) serve para unicidade e login, e
+/// `cpfEncrypted` (AES-256-GCM) só é aberto para o próprio titular.
+model User {
+  id           String     @id @default(uuid()) @db.Uuid
+  name         String
+  email        String     @unique
+  phone        String
+  cpfHash      String     @unique @map("cpf_hash") @db.VarChar(64)
+  cpfEncrypted String     @map("cpf_encrypted")
+  cpfLast2     String     @map("cpf_last2") @db.VarChar(2)
+  birthDate    DateTime   @map("birth_date") @db.Date
+  passwordHash String     @map("password_hash")
+  role         UserRole
+  status       UserStatus @default(ACTIVE)
+  failedLoginCount Int       @default(0) @map("failed_login_count")
+  lockedUntil      DateTime? @map("locked_until") @db.Timestamptz(6)
+  createdAt    DateTime   @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt    DateTime   @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  sessions  AuthSession[]
+  auditLogs AuditLog[]
+
+  passwordResetTokens PasswordResetToken[]
+
+  patients Patient[]
+
+  legalAcceptances       LegalAcceptance[]
+  privacyRequests        PrivacyRequest[]
+  notificationPreference NotificationPreference?
+  notifications          Notification[]
+  verifiedCampaigns      Campaign[] @relation("CampaignVerifiedBy")
+
+  professionalProfile Professional?
+  idempotencyKeys     IdempotencyKey[]
+  appointments        Appointment[]
+  safetyAlerts        SafetyAlert[]
+
+  @@index([role, status])
+  @@map("users")
+}
+
+model AuthSession {
+  id               String    @id @default(uuid()) @db.Uuid
+  userId           String    @map("user_id") @db.Uuid
+  refreshTokenHash String    @map("refresh_token_hash")
+  expiresAt        DateTime  @map("expires_at") @db.Timestamptz(6)
+  revokedAt        DateTime? @map("revoked_at") @db.Timestamptz(6)
+  createdAt        DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt        DateTime  @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@map("auth_sessions")
+}
+
+model PasswordResetToken {
+  id        String    @id @default(uuid()) @db.Uuid
+  userId    String    @map("user_id") @db.Uuid
+  tokenHash String    @unique @map("token_hash")
+  expiresAt DateTime  @map("expires_at") @db.Timestamptz(6)
+  usedAt    DateTime? @map("used_at") @db.Timestamptz(6)
+  createdAt DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@index([expiresAt])
+  @@map("password_reset_tokens")
+}
+
+// ---------------------------------------------------------------------------
+// Pacientes: o titular e seus dependentes
+// ---------------------------------------------------------------------------
+
+enum Sex {
+  FEMALE
+  MALE
+  OTHER
+  NOT_INFORMED
+}
+
+enum Relationship {
+  SELF
+  CHILD
+  SPOUSE
+  PARENT
+  SIBLING
+  GRANDPARENT
+  OTHER
+}
+
+/// Pessoa que pode ser atendida. Todo titular tem um registro SELF criado no
+/// cadastro; os demais são dependentes sob responsabilidade do titular.
+model Patient {
+  id           String       @id @default(uuid()) @db.Uuid
+  holderId     String       @map("holder_id") @db.Uuid
+  relationship Relationship
+  name         String
+  birthDate    DateTime     @map("birth_date") @db.Date
+  sex          Sex          @default(NOT_INFORMED)
+  cpfHash      String?      @map("cpf_hash") @db.VarChar(64)
+  cpfEncrypted String?      @map("cpf_encrypted")
+  cpfLast2     String?      @map("cpf_last2") @db.VarChar(2)
+  /// Declaração do titular de que é responsável legal ou tem autorização
+  /// do dependente (LGPD art. 14 para menores).
+  guardianConsentAt DateTime? @map("guardian_consent_at") @db.Timestamptz(6)
+  deletedAt    DateTime?    @map("deleted_at") @db.Timestamptz(6)
+  createdAt    DateTime     @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt    DateTime     @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  holder       User          @relation(fields: [holderId], references: [id], onDelete: Restrict)
+  appointments Appointment[]
+  safetyAlerts SafetyAlert[]
+
+  @@unique([holderId, cpfHash])
+  @@index([holderId])
+  @@index([deletedAt])
+  @@map("patients")
+}
+
+// ---------------------------------------------------------------------------
+// Profissionais, clínicas e serviços
+// ---------------------------------------------------------------------------
+
+model Specialty {
+  id        String   @id @default(uuid()) @db.Uuid
+  code      String   @unique @db.VarChar(40)
+  name      String   @unique
+  description String?
+  isActive  Boolean  @default(true) @map("is_active")
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt DateTime @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  professionals Professional[]
+
+  @@map("specialties")
+}
+
+/// Médico com registro no CRM. Só aparece na busca depois de aprovado.
+model Professional {
+  id                      String             @id @default(uuid()) @db.Uuid
+  userId                  String             @unique @map("user_id") @db.Uuid
+  crm                     String?            @db.VarChar(10)
+  crmState                String?            @map("crm_state") @db.VarChar(2)
+  specialtyId             String?            @map("specialty_id") @db.Uuid
+  bio                     String?            @db.VarChar(600)
+  /// Caminho da foto pública (ex.: /assets/photos/medicos/helena.jpg).
+  photoUrl                String?            @map("photo_url") @db.VarChar(300)
+  verificationStatus      VerificationStatus @default(PENDING) @map("verification_status")
+  verificationSubmittedAt DateTime?          @map("verification_submitted_at") @db.Timestamptz(6)
+  createdAt               DateTime           @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt               DateTime           @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  user      User       @relation(fields: [userId], references: [id], onDelete: Restrict)
+  specialty Specialty? @relation(fields: [specialtyId], references: [id], onDelete: Restrict)
+
+  clinicLinks                 ClinicProfessional[]
+  technicalResponsibleClinics Clinic[]               @relation("ClinicTechnicalResponsible")
+  serviceLinks                ServiceProfessional[]
+  availabilitySlots           AvailabilitySlot[]
+  verificationDocuments       VerificationDocument[]
+  clinicDocuments             ClinicDocument[]
+  appointments                Appointment[]
+
+  @@unique([crm, crmState])
+  @@index([verificationStatus])
+  @@index([specialtyId])
+  @@map("professionals")
+}
+
+model Clinic {
+  id                                 String             @id @default(uuid()) @db.Uuid
+  /// Cadastro Nacional de Estabelecimentos de Saúde (7 dígitos, DATASUS).
+  cnes                               String?            @unique @db.VarChar(7)
+  /// CEP do endereço (8 dígitos), usado para preencher e conferir o endereço.
+  cep                                String?            @db.VarChar(8)
+  name                               String
+  address                            String
+  city                               String
+  neighborhood                       String
+  latitude                           Float?
+  longitude                          Float?
+  verificationStatus                 VerificationStatus @default(PENDING) @map("verification_status")
+  technicalResponsibleProfessionalId String?            @map("technical_responsible_professional_id") @db.Uuid
+  createdAt                          DateTime           @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt                          DateTime           @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  technicalResponsible Professional?        @relation("ClinicTechnicalResponsible", fields: [technicalResponsibleProfessionalId], references: [id], onDelete: Restrict)
+  professionalLinks    ClinicProfessional[]
+  documents            ClinicDocument[]
+  services             Service[]
+  availabilitySlots    AvailabilitySlot[]
+  appointments         Appointment[]
+
+  @@index([verificationStatus])
+  @@index([city])
+  @@index([neighborhood])
+  @@map("clinics")
+}
+
+model VerificationDocument {
+  id             String   @id @default(uuid()) @db.Uuid
+  professionalId String   @map("professional_id") @db.Uuid
+  originalName   String   @map("original_name")
+  storagePath    String   @unique @map("storage_path")
+  mimeType       String   @map("mime_type")
+  sizeBytes      Int      @map("size_bytes")
+  createdAt      DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+
+  professional Professional @relation(fields: [professionalId], references: [id], onDelete: Restrict)
+
+  @@index([professionalId])
+  @@map("verification_documents")
+}
+
+/// Documento do local (alvará sanitário, comprovante de endereço), guardado criptografado.
+model ClinicDocument {
+  id             String   @id @default(uuid()) @db.Uuid
+  clinicId       String   @map("clinic_id") @db.Uuid
+  uploadedById   String   @map("uploaded_by_id") @db.Uuid
+  originalName   String   @map("original_name")
+  storagePath    String   @unique @map("storage_path")
+  mimeType       String   @map("mime_type")
+  sizeBytes      Int      @map("size_bytes")
+  createdAt      DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+
+  clinic     Clinic       @relation(fields: [clinicId], references: [id], onDelete: Restrict)
+  uploadedBy Professional @relation(fields: [uploadedById], references: [id], onDelete: Restrict)
+
+  @@index([clinicId])
+  @@map("clinic_documents")
+}
+
+model ClinicProfessional {
+  id             String   @id @default(uuid()) @db.Uuid
+  clinicId       String   @map("clinic_id") @db.Uuid
+  professionalId String   @map("professional_id") @db.Uuid
+  createdAt      DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+
+  clinic       Clinic       @relation(fields: [clinicId], references: [id], onDelete: Restrict)
+  professional Professional @relation(fields: [professionalId], references: [id], onDelete: Restrict)
+
+  @@unique([clinicId, professionalId])
+  @@index([clinicId])
+  @@index([professionalId])
+  @@map("clinic_professionals")
+}
+
+enum Modality {
+  IN_PERSON
+  REMOTE
+}
+
+model Service {
+  id              String   @id @default(uuid()) @db.Uuid
+  clinicId        String   @map("clinic_id") @db.Uuid
+  name            String
+  description     String?
+  modality        Modality
+  durationMinutes Int      @map("duration_minutes")
+  priceCents      Int?     @map("price_cents")
+  isActive        Boolean  @default(true) @map("is_active")
+  createdAt       DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt       DateTime @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  clinic Clinic @relation(fields: [clinicId], references: [id], onDelete: Restrict)
+
+  professionalLinks ServiceProfessional[]
+  availabilitySlots AvailabilitySlot[]
+  appointments      Appointment[]
+
+  @@index([clinicId])
+  @@index([isActive])
+  @@index([modality])
+  @@map("services")
+}
+
+model ServiceProfessional {
+  id             String   @id @default(uuid()) @db.Uuid
+  serviceId      String   @map("service_id") @db.Uuid
+  professionalId String   @map("professional_id") @db.Uuid
+  createdAt      DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+
+  service      Service      @relation(fields: [serviceId], references: [id], onDelete: Restrict)
+  professional Professional @relation(fields: [professionalId], references: [id], onDelete: Restrict)
+
+  @@unique([serviceId, professionalId])
+  @@index([serviceId])
+  @@index([professionalId])
+  @@map("service_professionals")
+}
+
+enum AvailabilityStatus {
+  AVAILABLE
+  BOOKED
+  BLOCKED
+}
+
+model AvailabilitySlot {
+  id             String             @id @default(uuid()) @db.Uuid
+  clinicId       String             @map("clinic_id") @db.Uuid
+  professionalId String             @map("professional_id") @db.Uuid
+  serviceId      String             @map("service_id") @db.Uuid
+  startsAt       DateTime           @map("starts_at") @db.Timestamptz(6)
+  endsAt         DateTime           @map("ends_at") @db.Timestamptz(6)
+  status         AvailabilityStatus @default(AVAILABLE)
+  createdAt      DateTime           @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt      DateTime           @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  clinic       Clinic        @relation(fields: [clinicId], references: [id], onDelete: Restrict)
+  professional Professional  @relation(fields: [professionalId], references: [id], onDelete: Restrict)
+  service      Service       @relation(fields: [serviceId], references: [id], onDelete: Restrict)
+  appointments Appointment[]
+
+  @@index([startsAt])
+  @@index([professionalId, startsAt])
+  @@index([clinicId, startsAt])
+  @@index([serviceId, startsAt])
+  @@index([status, startsAt])
+  @@map("availability_slots")
+}
+
+// ---------------------------------------------------------------------------
+// Agendamentos
+// ---------------------------------------------------------------------------
+
+enum AppointmentStatus {
+  CONFIRMED
+  CANCELLED_BY_PATIENT
+  CANCELLED_BY_PROVIDER
+  COMPLETED
+}
+
+enum DependentCheckResult {
+  CONFIRMED
+  MISMATCH
+}
+
+model Appointment {
+  id                 String            @id @default(uuid()) @db.Uuid
+  holderId           String            @map("holder_id") @db.Uuid
+  patientId          String            @map("patient_id") @db.Uuid
+  serviceId          String            @map("service_id") @db.Uuid
+  professionalId     String            @map("professional_id") @db.Uuid
+  clinicId           String            @map("clinic_id") @db.Uuid
+  slotId             String            @map("slot_id") @db.Uuid
+  status             AppointmentStatus @default(CONFIRMED)
+  cancelledAt        DateTime?         @map("cancelled_at") @db.Timestamptz(6)
+  cancellationReason String?           @map("cancellation_reason")
+
+  serviceNameSnapshot            String   @map("service_name_snapshot")
+  serviceDurationMinutesSnapshot Int      @map("service_duration_minutes_snapshot")
+  serviceModalitySnapshot        Modality @map("service_modality_snapshot")
+  servicePriceCentsSnapshot      Int?     @map("service_price_cents_snapshot")
+  professionalNameSnapshot       String   @map("professional_name_snapshot")
+  clinicNameSnapshot             String   @map("clinic_name_snapshot")
+  clinicAddressSnapshot          String   @map("clinic_address_snapshot")
+
+  /// Conferência presencial do vínculo responsável–dependente (documentos na recepção).
+  dependentCheckResult DependentCheckResult? @map("dependent_check_result")
+  dependentCheckedAt   DateTime?             @map("dependent_checked_at") @db.Timestamptz(6)
+  dependentCheckedById String?               @map("dependent_checked_by_id") @db.Uuid
+
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt DateTime @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  holder       User             @relation(fields: [holderId], references: [id], onDelete: Restrict)
+  patient      Patient          @relation(fields: [patientId], references: [id], onDelete: Restrict)
+  service      Service          @relation(fields: [serviceId], references: [id], onDelete: Restrict)
+  professional Professional     @relation(fields: [professionalId], references: [id], onDelete: Restrict)
+  clinic       Clinic           @relation(fields: [clinicId], references: [id], onDelete: Restrict)
+  slot         AvailabilitySlot @relation(fields: [slotId], references: [id], onDelete: Restrict)
+
+  @@index([holderId])
+  @@index([patientId])
+  @@index([serviceId])
+  @@index([professionalId])
+  @@index([clinicId])
+  @@index([slotId])
+  @@index([status])
+  @@map("appointments")
+}
+
+model IdempotencyKey {
+  id        String   @id @default(uuid()) @db.Uuid
+  userId    String   @map("user_id") @db.Uuid
+  operation String   @db.VarChar(64)
+  key       String   @db.VarChar(128)
+  result    Json     @db.JsonB
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, operation, key])
+  @@index([userId])
+  @@map("idempotency_keys")
+}
+
+// ---------------------------------------------------------------------------
+// LGPD: aceites, preferências e solicitações do titular
+// ---------------------------------------------------------------------------
+
+enum LegalDocumentType {
+  TERMS_OF_USE
+  PRIVACY_POLICY
+  HEALTH_DATA_CONSENT
+}
+
+enum PrivacyRequestType {
+  ACCOUNT_DELETION
+}
+
+enum PrivacyRequestStatus {
+  PENDING
+  PROCESSING
+  COMPLETED
+  FAILED
+}
+
+model LegalAcceptance {
+  id           String            @id @default(uuid()) @db.Uuid
+  userId       String            @map("user_id") @db.Uuid
+  documentType LegalDocumentType @map("document_type")
+  version      String
+  acceptedAt   DateTime          @default(now()) @map("accepted_at") @db.Timestamptz(6)
+  revokedAt    DateTime?         @map("revoked_at") @db.Timestamptz(6)
+
+  user User @relation(fields: [userId], references: [id], onDelete: Restrict)
+
+  @@unique([userId, documentType, version])
+  @@index([userId])
+  @@map("legal_acceptances")
+}
+
+model NotificationPreference {
+  id                   String   @id @default(uuid()) @db.Uuid
+  userId               String   @unique @map("user_id") @db.Uuid
+  emailEnabled         Boolean  @default(true) @map("email_enabled")
+  appointmentReminders Boolean  @default(true) @map("appointment_reminders")
+  campaignUpdates      Boolean  @default(false) @map("campaign_updates")
+  createdAt            DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt            DateTime @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@map("notification_preferences")
+}
+
+model Notification {
+  id               String    @id @default(uuid()) @db.Uuid
+  userId           String    @map("user_id") @db.Uuid
+  type             String    @db.VarChar(100)
+  title            String    @db.VarChar(200)
+  message          String
+  deduplicationKey String    @unique @map("deduplication_key") @db.VarChar(200)
+  readAt           DateTime? @map("read_at") @db.Timestamptz(6)
+  emailSentAt      DateTime? @map("email_sent_at") @db.Timestamptz(6)
+  createdAt        DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, createdAt])
+  @@index([userId, readAt])
+  @@map("notifications")
+}
+
+model PrivacyRequest {
+  id          String               @id @default(uuid()) @db.Uuid
+  userId      String               @map("user_id") @db.Uuid
+  type        PrivacyRequestType
+  status      PrivacyRequestStatus @default(PENDING)
+  requestedAt DateTime             @default(now()) @map("requested_at") @db.Timestamptz(6)
+  completedAt DateTime?            @map("completed_at") @db.Timestamptz(6)
+  createdAt   DateTime             @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt   DateTime             @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  user User @relation(fields: [userId], references: [id], onDelete: Restrict)
+
+  @@index([userId])
+  @@index([status])
+  @@map("privacy_requests")
+}
+
+// ---------------------------------------------------------------------------
+// Infraestrutura: outbox, auditoria e tarefas internas
+// ---------------------------------------------------------------------------
+
+enum OutboxStatus {
+  PENDING
+  PROCESSING
+  PROCESSED
+  FAILED
+}
+
+model OutboxEvent {
+  id                  String       @id @default(uuid()) @db.Uuid
+  type                String       @db.VarChar(100)
+  payload             Json         @db.JsonB
+  deduplicationKey    String?      @unique @map("deduplication_key") @db.VarChar(200)
+  status              OutboxStatus @default(PENDING)
+  attemptCount        Int          @default(0) @map("attempt_count")
+  nextAttemptAt       DateTime?    @map("next_attempt_at") @db.Timestamptz(6)
+  processingStartedAt DateTime?    @map("processing_started_at") @db.Timestamptz(6)
+  processedAt         DateTime?    @map("processed_at") @db.Timestamptz(6)
+  lastError           String?      @map("last_error")
+  createdAt           DateTime     @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt           DateTime     @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  @@index([status, nextAttemptAt, createdAt])
+  @@map("outbox_events")
+}
+
+model AuditLog {
+  id         String   @id @default(uuid()) @db.Uuid
+  actorId    String   @map("actor_id") @db.Uuid
+  action     String   @db.VarChar(100)
+  entityType String   @map("entity_type") @db.VarChar(64)
+  entityId   String   @map("entity_id") @db.Uuid
+  reason     String?  @db.VarChar(2000)
+  details    Json     @default("{}")
+  createdAt  DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+
+  actor User @relation(fields: [actorId], references: [id], onDelete: Restrict)
+
+  @@index([entityType, entityId, createdAt])
+  @@index([actorId, createdAt])
+  @@index([createdAt])
+  @@map("audit_logs")
+}
+
+model InternalJobLease {
+  name      String    @id @db.VarChar(64)
+  ownerId   String?   @map("owner_id") @db.Uuid
+  expiresAt DateTime? @map("expires_at") @db.Timestamptz(6)
+
+  @@map("internal_job_leases")
+}
+
+// ---------------------------------------------------------------------------
+// Campanhas de saúde
+// ---------------------------------------------------------------------------
+
+enum CampaignStatus {
+  DRAFT
+  UNDER_REVIEW
+  PUBLISHED
+  ENDED
+  ARCHIVED
+}
+
+enum SourceStatus {
+  VALID
+  UNREACHABLE
+  OUTDATED
+  NOT_CHECKED
+}
+
+model Campaign {
+  id                    String         @id @default(uuid()) @db.Uuid
+  title                 String
+  type                  String
+  agency                String
+  targetAudience        String         @map("target_audience") @db.Text
+  requirements          String         @db.Text
+  location              String
+  startsAt              DateTime       @map("starts_at") @db.Timestamptz(6)
+  endsAt                DateTime       @map("ends_at") @db.Timestamptz(6)
+  sourceUrl             String         @map("source_url")
+  sourceStatus          SourceStatus   @default(NOT_CHECKED) @map("source_status")
+  sourceCheckedAt       DateTime?      @map("source_checked_at") @db.Timestamptz(6)
+  sourceCheckFailure    String?        @map("source_check_failure") @db.VarChar(32)
+  sourceCheckClaimId    String?        @map("source_check_claim_id") @db.Uuid
+  sourceCheckClaimUntil DateTime?      @map("source_check_claim_until") @db.Timestamptz(6)
+  status                CampaignStatus @default(DRAFT)
+  verifiedById          String?        @map("verified_by_id") @db.Uuid
+  verifiedAt            DateTime?      @map("verified_at") @db.Timestamptz(6)
+  createdAt             DateTime       @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt             DateTime       @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  verifiedBy User? @relation("CampaignVerifiedBy", fields: [verifiedById], references: [id], onDelete: Restrict)
+
+  @@index([status, startsAt])
+  @@index([status, endsAt])
+  @@index([sourceStatus])
+  @@index([status, sourceCheckedAt])
+  @@index([verifiedById])
+  @@map("campaigns")
+}
+
+// ---------------------------------------------------------------------------
+// Proteção de dependentes
+// ---------------------------------------------------------------------------
+
+enum SafetyAlertKind {
+  /// O médico não conseguiu conferir o vínculo no atendimento.
+  LINK_MISMATCH
+  /// O CPF do dependente já aparece em outra conta.
+  DUPLICATE_CPF
+  /// Muitas crianças cadastradas em pouco tempo pela mesma conta.
+  MANY_MINORS
+}
+
+enum SafetyAlertStatus {
+  OPEN
+  RESOLVED
+}
+
+/// Caso para a administração analisar. Nunca guarda CPF.
+model SafetyAlert {
+  id            String            @id @default(uuid()) @db.Uuid
+  kind          SafetyAlertKind
+  status        SafetyAlertStatus @default(OPEN)
+  holderId      String            @map("holder_id") @db.Uuid
+  patientId     String?           @map("patient_id") @db.Uuid
+  appointmentId String?           @map("appointment_id") @db.Uuid
+  details       Json              @default("{}")
+  resolution    String?           @db.VarChar(2000)
+  resolvedById  String?           @map("resolved_by_id") @db.Uuid
+  resolvedAt    DateTime?         @map("resolved_at") @db.Timestamptz(6)
+  createdAt     DateTime          @default(now()) @map("created_at") @db.Timestamptz(6)
+
+  holder  User     @relation(fields: [holderId], references: [id], onDelete: Restrict)
+  patient Patient? @relation(fields: [patientId], references: [id], onDelete: Restrict)
+
+  @@index([status, createdAt])
+  @@index([holderId])
+  @@map("safety_alerts")
+}

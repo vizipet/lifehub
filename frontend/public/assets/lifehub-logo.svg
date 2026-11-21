@@ -1,0 +1,27 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 640 180" role="img" aria-labelledby="title desc">
+  <title id="title">LifeHub</title>
+  <desc id="desc">Símbolo de saúde conectada com pessoa, coração e pontos unidos, acompanhado do nome LifeHub.</desc>
+  <style>
+    @media (prefers-color-scheme: dark) {
+      .life { fill: #5cbdb5; }
+      .tag { fill: #b9c6c1; }
+    }
+  </style>
+  <defs>
+    <linearGradient id="lhg" x1="20" y1="20" x2="145" y2="155" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#176B68"/>
+      <stop offset="1" stop-color="#43C6AC"/>
+    </linearGradient>
+  </defs>
+  <g transform="translate(8 8)">
+    <path d="M82 152C58 130 24 105 24 65C24 36 44 18 68 18C85 18 97 27 106 41C115 27 127 18 144 18C168 18 188 36 188 65C188 105 154 130 130 152L106 171Z" fill="url(#lhg)" transform="scale(.82)"/>
+    <circle cx="87" cy="55" r="14" fill="#FFF8F1"/>
+    <path d="M57 100C65 79 76 71 87 71C98 71 109 79 117 100" fill="none" stroke="#FFF8F1" stroke-width="12" stroke-linecap="round"/>
+    <circle cx="46" cy="77" r="7" fill="#FF7A6B"/>
+    <circle cx="128" cy="77" r="7" fill="#FF7A6B"/>
+    <path d="M46 77L66 87M128 77L108 87" stroke="#FFF8F1" stroke-width="5" stroke-linecap="round"/>
+    <path d="M87 119C75 108 66 101 66 90C66 82 72 77 79 77C84 77 87 80 90 84C93 80 96 77 101 77C108 77 114 82 114 90C114 101 103 110 90 121Z" fill="#FF7A6B"/>
+  </g>
+  <text x="175" y="108" font-family="Nunito Sans, Arial, sans-serif" font-size="82" font-weight="800" letter-spacing="-3"><tspan class="life" fill="#176B68">Life</tspan><tspan fill="#43C6AC">Hub</tspan></text>
+  <text x="182" y="143" font-family="Inter, Arial, sans-serif" font-size="20" font-weight="500" class="tag" fill="#253238" letter-spacing="1.6">SAÚDE CONECTADA, CUIDADO PRÓXIMO</text>
+</svg>

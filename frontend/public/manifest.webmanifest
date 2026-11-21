@@ -1,0 +1,16 @@
+{
+  "id": "/",
+  "name": "LifeHub — Consultas sem demora",
+  "short_name": "LifeHub",
+  "lang": "pt-BR",
+  "description": "Encontre médicos e agende consultas para você e sua família.",
+  "start_url": "/",
+  "scope": "/",
+  "display": "standalone",
+  "background_color": "#FFF8F1",
+  "theme_color": "#176B68",
+  "categories": ["health", "medical"],
+  "icons": [
+    { "src": "/assets/lifehub-mark.svg", "sizes": "any", "type": "image/svg+xml", "purpose": "any" }
+  ]
+}

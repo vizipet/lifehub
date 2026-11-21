@@ -1,0 +1,15 @@
+{
+  "name": "lifehub",
+  "version": "1.0.0",
+  "private": true,
+  "description": "LifeHub: busca de médicos e agendamento de consultas (projeto acadêmico).",
+  "scripts": {
+    "setup": "node scripts/setup.mjs",
+    "dev": "node scripts/dev.mjs",
+    "test": "npm --prefix backend test && npm --prefix frontend test",
+    "reset-db": "node backend/scripts/db.mjs --reset"
+  },
+  "engines": {
+    "node": ">=22"
+  }
+}

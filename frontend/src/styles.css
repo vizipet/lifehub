@@ -1,0 +1,258 @@
+@import "tailwindcss";
+
+/*
+ * Identidade LifeHub: tons naturais (cal, verde-mata, azul) com
+ * tipografia humanista. Superfícies lisas, sem sombras genéricas.
+ */
+@theme {
+  --font-sans: "Alegreya Sans", "Segoe UI", system-ui, sans-serif;
+  --font-title: "Alegreya", Georgia, serif;
+
+  --color-cal: #eef1ea; /* parede caiada, levemente esverdeada */
+  --color-papel: #fbfcf8; /* superfícies: cartões, campos */
+  --color-primary: #176b68; /* verde-mata (marca LifeHub) */
+  --color-primary-dark: #0f4f4c;
+  --color-azul: #2b5797; /* azul */
+  --color-azul-claro: #dfe7f3;
+  --color-pitanga: #e4604e; /* só para urgência e alertas */
+  --color-ink: #1e2b2a; /* tinta */
+  --color-muted: #55635f;
+  --color-line: #cdd6cc;
+  --color-soft: #e2ebe3;
+
+  /* aliases usados pelas telas */
+  --color-cream: var(--color-cal);
+  --color-coral: var(--color-pitanga);
+  --color-mint: #6fb7a6;
+  --color-success: #2e7d5b;
+  --color-warning: #a8651a;
+  --color-danger: #c03f2f;
+  --color-info: var(--color-azul);
+  /* texto sobre fundo colorido (botões, chips ativos, faixas) */
+  --color-on-accent: #ffffff;
+}
+
+/*
+ * Modo escuro automático: segue o tema do celular/computador.
+ * Contraste conferido (WCAG): texto principal 15:1, texto secundário 7:1,
+ * verde da marca 8:1, texto sobre botões 6:1 ou mais.
+ * No escuro o verde fica mais claro, então o texto dos botões fica escuro.
+ */
+@media (prefers-color-scheme: dark) {
+  :root {
+    color-scheme: dark;
+    --color-cal: #0f1716;
+    --color-papel: #172120;
+    --color-primary: #5cbdb5;
+    --color-primary-dark: #7fd0c9;
+    --color-azul: #8db0ec;
+    --color-azul-claro: #1b2a42;
+    --color-pitanga: #f08a78;
+    --color-ink: #e4ebe8;
+    --color-muted: #9fb0aa;
+    --color-line: #34433f;
+    --color-soft: #1f2c2a;
+    --color-mint: #4fa391;
+    --color-success: #5fc79a;
+    --color-warning: #e5a55a;
+    --color-danger: #f0806f;
+    --color-on-accent: #0c1413;
+  }
+
+  /* Fotos um pouco menos brilhantes no escuro, para não ofuscar. */
+  img:not([src$='.svg']) {
+    filter: brightness(0.92);
+  }
+}
+
+:root {
+  color: var(--color-ink);
+  background: var(--color-cal);
+  font-family: var(--font-sans);
+  font-size: 17px;
+  line-height: 1.55;
+  -webkit-font-smoothing: antialiased;
+  text-rendering: optimizeLegibility;
+  font-variant-numeric: lining-nums;
+}
+
+html,
+body {
+  background: var(--color-cal);
+  min-height: 100%;
+}
+
+body {
+  margin: 0;
+  min-width: 320px;
+}
+
+h1,
+h2,
+h3 {
+  font-family: var(--font-title);
+  font-weight: 800;
+  line-height: 1.12;
+  text-wrap: balance;
+}
+
+p {
+  text-wrap: pretty;
+}
+
+:focus-visible {
+  outline: 3px solid var(--color-azul);
+  outline-offset: 2px;
+}
+
+/* ---------------------------------------------------------------------------
+   Animação só nos momentos que importam. Todas partem de um estado "de" e
+   terminam no estado normal do elemento: com "reduzir movimento" ligado
+   (regra abaixo), o conteúdo aparece direto, completo e parado.
+   --------------------------------------------------------------------------- */
+
+/* Troca de tela: entra subindo de leve. */
+@keyframes page-enter {
+  from {
+    opacity: 0;
+    transform: translateY(6px);
+  }
+}
+.page-enter {
+  animation: page-enter 220ms cubic-bezier(0.2, 0.7, 0.3, 1) both;
+}
+
+/* Cartão que sai da lista (consulta cancelada ou concluída). */
+@keyframes card-leave {
+  to {
+    opacity: 0;
+    transform: translateY(-4px) scale(0.96);
+  }
+}
+.card-leaving {
+  animation: card-leave 300ms ease-in forwards;
+  pointer-events: none;
+}
+
+/* Check da consulta confirmada: o círculo surge, o traço se desenha, um anel se espalha uma vez. */
+@keyframes check-pop {
+  from {
+    opacity: 0;
+    transform: scale(0.6);
+  }
+  60% {
+    opacity: 1;
+    transform: scale(1.06);
+  }
+}
+@keyframes check-draw {
+  from {
+    stroke-dashoffset: 30;
+  }
+}
+@keyframes check-ring {
+  from {
+    opacity: 0.35;
+    transform: scale(1);
+  }
+  to {
+    opacity: 0;
+    transform: scale(1.6);
+  }
+}
+.check-pop {
+  transform-origin: center;
+  animation: check-pop 420ms cubic-bezier(0.2, 0.8, 0.3, 1.2) both;
+}
+.check-draw {
+  stroke-dasharray: 30;
+  stroke-dashoffset: 0;
+  animation: check-draw 380ms 300ms ease-out both;
+}
+.check-ring {
+  animation: check-ring 900ms 250ms ease-out both;
+}
+
+/* Letra grande (botão A+): o menu de cima mostra só os ícones até telas largas.
+   O nome continua disponível para leitor de tela e aparece ao passar o mouse. */
+@media (max-width: 1439px) {
+  html[data-font-level] .nav-label {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    overflow: hidden;
+    clip: rect(0, 0, 0, 0);
+    white-space: nowrap;
+  }
+}
+
+.logo-mark {
+  display: none;
+}
+@media (max-width: 639px) {
+  html[data-font-level] .logo-full {
+    display: none;
+  }
+  html[data-font-level] .logo-mark {
+    display: block;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation: none !important;
+    transition: none !important;
+  }
+}
+
+@layer components {
+  .btn {
+    @apply inline-flex min-h-11 items-center justify-center gap-2 rounded-lg px-4 py-2.5 font-bold transition-colors disabled:cursor-not-allowed disabled:opacity-55;
+  }
+  .btn-primary {
+    @apply bg-primary text-on-accent hover:bg-primary-dark;
+  }
+  .btn-secondary {
+    @apply border-2 border-primary bg-papel text-primary hover:bg-soft;
+  }
+  .btn-ghost {
+    @apply text-primary hover:bg-soft;
+  }
+  .btn-danger {
+    @apply bg-danger text-on-accent hover:brightness-95;
+  }
+  .btn-coral {
+    @apply bg-pitanga text-on-accent hover:brightness-95;
+  }
+  /* Superfície lisa: borda fina, sem sombra. */
+  .card {
+    @apply rounded-xl border border-line bg-papel p-4;
+  }
+  .input {
+    @apply min-h-11 w-full rounded-lg border-2 border-line bg-papel px-3.5 py-2 text-base text-ink placeholder:text-muted/70 focus:border-azul focus:outline-none;
+  }
+  .label {
+    @apply mb-1 block font-bold text-ink;
+  }
+  .chip {
+    @apply inline-flex min-h-10 items-center gap-1.5 rounded-full border-2 border-line bg-papel px-3.5 font-medium text-ink transition-colors hover:border-primary;
+  }
+  .chip-active {
+    @apply border-primary bg-primary text-on-accent hover:border-primary;
+  }
+  .pill {
+    @apply inline-flex items-center gap-1 rounded-full px-2.5 py-0.5 text-sm font-bold;
+  }
+  .page-title {
+    @apply font-title text-3xl font-extrabold text-ink md:text-4xl;
+  }
+  /* Lista com linhas, para conteúdo que não é "objeto" (no lugar de cartões soltos). */
+  .rows {
+    @apply divide-y divide-line overflow-hidden rounded-xl border border-line bg-papel;
+  }
+  .rows > * {
+    @apply p-4;
+  }
+}

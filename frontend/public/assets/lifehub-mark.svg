@@ -1,0 +1,12 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 180 180" role="img" aria-labelledby="title desc">
+  <title id="title">Símbolo LifeHub</title>
+  <desc id="desc">Pessoa acolhida por um coração com pontos conectados.</desc>
+  <defs><linearGradient id="g" x1="20" y1="20" x2="160" y2="165" gradientUnits="userSpaceOnUse"><stop stop-color="#176B68"/><stop offset="1" stop-color="#43C6AC"/></linearGradient></defs>
+  <rect width="180" height="180" rx="42" fill="#FFF8F1"/>
+  <path d="M90 157C65 135 29 108 29 66C29 37 49 20 73 20C90 20 101 29 110 43C119 29 131 20 148 20C153 20 158 21 162 23C166 29 168 36 168 44C168 88 129 122 101 148Z" fill="url(#g)" transform="translate(-18 1)"/>
+  <circle cx="90" cy="59" r="14" fill="#FFF8F1"/>
+  <path d="M60 104C68 83 79 75 90 75C101 75 112 83 120 104" fill="none" stroke="#FFF8F1" stroke-width="12" stroke-linecap="round"/>
+  <circle cx="49" cy="81" r="7" fill="#FF7A6B"/><circle cx="131" cy="81" r="7" fill="#FF7A6B"/>
+  <path d="M49 81L69 91M131 81L111 91" stroke="#FFF8F1" stroke-width="5" stroke-linecap="round"/>
+  <path d="M90 126C78 115 69 108 69 97C69 89 75 84 82 84C87 84 90 87 93 91C96 87 99 84 104 84C111 84 117 89 117 97C117 108 106 117 93 128Z" fill="#FF7A6B"/>
+</svg>
