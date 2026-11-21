@@ -10,6 +10,9 @@ export default defineConfig({
     seed: "tsx prisma/seed.ts",
   },
   datasource: {
-    url: directUrl || env("DATABASE_URL"),
+    // "prisma generate" roda sozinho ao instalar as dependências, antes de o
+    // setup criar o .env. Ele não conecta no banco, então um endereço provisório
+    // basta; migrate e seed só rodam depois que o .env existe.
+    url: directUrl || (process.env.DATABASE_URL ? env("DATABASE_URL") : "postgresql://ainda-sem-env@localhost/lifehub"),
   },
 });

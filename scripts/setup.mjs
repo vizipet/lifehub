@@ -25,12 +25,14 @@ function run(title, command, cwd) {
   }
 }
 
-if (!existsSync(join(backend, 'node_modules'))) run('Instalando dependências do backend', 'npm ci --no-audit --no-fund', backend);
-if (!existsSync(join(frontend, 'node_modules'))) run('Instalando dependências do frontend', 'npm ci --no-audit --no-fund', frontend);
-
+// O .env vem antes da instalação: o "prisma generate" que roda ao instalar já o lê.
+// (env.mjs só usa recursos do próprio Node, então funciona sem node_modules.)
 const { ensureEnv } = await import(new URL('../backend/scripts/env.mjs', import.meta.url).href);
 const env = ensureEnv();
 console.log(env.created ? '\n✔ Arquivo backend/.env criado com chaves novas' : '\n✔ backend/.env mantido');
+
+if (!existsSync(join(backend, 'node_modules'))) run('Instalando dependências do backend', 'npm ci --no-audit --no-fund', backend);
+if (!existsSync(join(frontend, 'node_modules'))) run('Instalando dependências do frontend', 'npm ci --no-audit --no-fund', frontend);
 
 const { startDb } = await import(new URL('../backend/scripts/db.mjs', import.meta.url).href);
 console.log('\n▶ Ligando o banco PostgreSQL local (a primeira vez demora um pouco)');
