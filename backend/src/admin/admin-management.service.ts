@@ -1,3 +1,4 @@
+import { consultaWhen } from '../common/format/when';
 import {
   BadRequestException,
   ForbiddenException,
@@ -236,9 +237,11 @@ export class AdminManagementService {
         data: { status: dto.status },
         select: { id: true, name: true, status: true },
       });
+      let cancelledAppointments = 0;
       if (dto.status === UserStatus.BLOCKED) {
         // Bloqueio vale na hora: todas as sessões abertas são encerradas.
         await this.sessions.revokeAllForUser(userId, tx);
+        cancelledAppointments = await this.cancelUpcomingOfBlocked(tx, user.id, user.role);
       }
       await this.audit.record(
         {
@@ -247,12 +250,80 @@ export class AdminManagementService {
           entityType: 'USER',
           entityId: userId,
           reason: dto.reason,
-          details: { from: user.status, to: dto.status },
+          details: { from: user.status, to: dto.status, ...(cancelledAppointments ? { cancelledAppointments } : {}) },
         },
         tx,
       );
-      return updated;
+      return { ...updated, cancelledAppointments };
     });
+  }
+
+  /**
+   * Conta bloqueada não deixa consulta marcada pendurada: médico bloqueado não vai
+   * atender, e paciente bloqueado (ex.: suspeita sobre um dependente) não deve ir.
+   * As consultas futuras são canceladas, os horários voltam a ficar livres e o
+   * outro lado é avisado.
+   */
+  private async cancelUpcomingOfBlocked(tx: Prisma.TransactionClient, userId: string, role: string) {
+    const now = new Date();
+    const professional =
+      role === 'PROFESSIONAL' ? await tx.professional.findUnique({ where: { userId }, select: { id: true } }) : null;
+    if (role === 'PROFESSIONAL' && !professional) return 0;
+    const upcoming = await tx.appointment.findMany({
+      where: {
+        status: 'CONFIRMED',
+        slot: { startsAt: { gt: now } },
+        ...(professional ? { professionalId: professional.id } : { holderId: userId }),
+      },
+      select: {
+        id: true,
+        slotId: true,
+        holderId: true,
+        serviceNameSnapshot: true,
+        professionalNameSnapshot: true,
+        clinicNameSnapshot: true,
+        patient: { select: { name: true } },
+        professional: { select: { userId: true } },
+        slot: { select: { startsAt: true } },
+      },
+    });
+    if (!upcoming.length) return 0;
+    await tx.appointment.updateMany({
+      where: { id: { in: upcoming.map((item) => item.id) } },
+      data: professional
+        ? { status: 'CANCELLED_BY_PROVIDER', cancelledAt: now, cancellationReason: 'O médico está indisponível no LifeHub no momento.' }
+        : { status: 'CANCELLED_BY_PATIENT', cancelledAt: now, cancellationReason: 'Conta do paciente suspensa pela administração do LifeHub.' },
+    });
+    await tx.availabilitySlot.updateMany({
+      where: { id: { in: upcoming.map((item) => item.slotId) }, status: 'BOOKED' },
+      data: { status: 'AVAILABLE' },
+    });
+    await tx.notification.createMany({
+      data: upcoming.map((item) => {
+        const when = consultaWhen(item.slot.startsAt);
+        return professional
+          ? {
+              userId: item.holderId,
+              type: 'APPOINTMENT_CANCELLED',
+              title: 'Consulta cancelada',
+              message:
+                `A consulta de ${item.patient.name} com ${item.professionalNameSnapshot} (${when}, ${item.clinicNameSnapshot}) ` +
+                'foi cancelada porque o médico está indisponível no LifeHub no momento. Você pode agendar com outro médico.',
+              deduplicationKey: `USER_BLOCKED_CANCEL:${item.id}`,
+            }
+          : {
+              userId: item.professional.userId,
+              type: 'APPOINTMENT_CANCELLED',
+              title: 'Consulta cancelada',
+              message:
+                `A consulta de ${item.patient.name} (${item.serviceNameSnapshot}, ${when}, ${item.clinicNameSnapshot}) ` +
+                'foi cancelada pela administração do LifeHub. O horário voltou a ficar livre.',
+              deduplicationKey: `USER_BLOCKED_CANCEL:${item.id}`,
+            };
+      }),
+      skipDuplicates: true,
+    });
+    return upcoming.length;
   }
 
   async listClinics(query: ListClinicsQueryDto) {

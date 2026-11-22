@@ -6,6 +6,7 @@ import { createVerificationResultNotification } from './verification-result.noti
 import { UserRole } from '../generated/prisma/client';
 import { APPOINTMENT_REMINDER_24H } from './appointment-reminder.event';
 import { createAppointmentReminderNotification } from './appointment-reminder.notification';
+import { consultaWhen } from '../common/format/when';
 
 interface NotificationOutboxEvent {
   id: string;
@@ -146,7 +147,7 @@ async markAllAsRead(userId: string) {
               userId: true,
             },
           },
-          patient: { select: { name: true } },
+          patient: { select: { name: true, relationship: true } },
           slot: { select: { startsAt: true } },
         },
       });
@@ -185,16 +186,7 @@ async markAllAsRead(userId: string) {
 
     // O médico também fica sabendo de cada consulta nova na agenda dele.
     if (event.type === 'APPOINTMENT_CONFIRMED' && appointment.professional?.userId) {
-      const when = appointment.slot?.startsAt
-        ? appointment.slot.startsAt.toLocaleString('pt-BR', {
-            timeZone: 'America/Recife',
-            weekday: 'long',
-            day: '2-digit',
-            month: '2-digit',
-            hour: '2-digit',
-            minute: '2-digit',
-          })
-        : null;
+      const when = appointment.slot?.startsAt ? consultaWhen(appointment.slot.startsAt) : null;
       const professionalKey = [event.type, event.id, appointment.professional.userId].join(':');
       await this.prisma.notification.upsert({
         where: { deduplicationKey: professionalKey },
@@ -226,16 +218,22 @@ async markAllAsRead(userId: string) {
       professional: {
         userId: string;
       };
+      patient?: { name: string; relationship: string } | null;
+      slot?: { startsAt: Date } | null;
     },
   ) {
+    const when = appointment.slot?.startsAt ? ` de ${consultaWhen(appointment.slot.startsAt)}` : '';
+    const dependent =
+      appointment.patient && appointment.patient.relationship !== 'SELF' ? appointment.patient.name : null;
     if (eventType === 'APPOINTMENT_CONFIRMED') {
       return {
         userId: appointment.holderId,
         title: 'Consulta confirmada',
         message:
-          `Seu agendamento de ${appointment.serviceNameSnapshot} ` +
-          `com ${appointment.professionalNameSnapshot} ` +
-          `foi confirmado em ${appointment.clinicNameSnapshot}.`,
+          (dependent ? `Para ${dependent}: ` : '') +
+          `${appointment.serviceNameSnapshot} com ${appointment.professionalNameSnapshot} ` +
+          `em ${appointment.clinicNameSnapshot}` +
+          (appointment.slot?.startsAt ? `: ${consultaWhen(appointment.slot.startsAt)}.` : '.'),
       };
     }
 
@@ -250,8 +248,8 @@ async markAllAsRead(userId: string) {
           userId: appointment.professional.userId,
           title: 'Consulta cancelada',
           message:
-            `O agendamento de ${appointment.serviceNameSnapshot} ` +
-            'foi cancelado pelo paciente.',
+            `${appointment.patient?.name ?? 'O paciente'} cancelou ${appointment.serviceNameSnapshot}${when} ` +
+            `em ${appointment.clinicNameSnapshot}. O horário voltou a ficar livre na sua agenda.`,
         };
       }
 
@@ -265,7 +263,7 @@ async markAllAsRead(userId: string) {
           userId: appointment.holderId,
           title: 'Consulta cancelada',
           message:
-            `Seu agendamento de ${appointment.serviceNameSnapshot} ` +
+            `${dependent ? `O agendamento de ${dependent}` : 'Seu agendamento'} de ${appointment.serviceNameSnapshot}${when} ` +
             `com ${appointment.professionalNameSnapshot} ` +
             'foi cancelado pelo profissional.' +
             (reason ? ` Motivo: ${reason}` : ''),

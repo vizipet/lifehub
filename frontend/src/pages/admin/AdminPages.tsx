@@ -449,16 +449,25 @@ export function AdminUsersPage() {
   const [reason, setReason] = useState('');
   const [error, setError] = useState('');
   const [busy, setBusy] = useState(false);
+  const [done, setDone] = useState('');
 
   async function toggle() {
     if (!target) return;
     setBusy(true);
     setError('');
     try {
-      await request(`/admin/users/${target.id}/status`, {
+      const blocking = target.status === 'ACTIVE';
+      const { data } = await request<{ data: { cancelledAppointments: number } }>(`/admin/users/${target.id}/status`, {
         method: 'PATCH',
-        body: jsonBody({ status: target.status === 'ACTIVE' ? 'BLOCKED' : 'ACTIVE', reason }),
+        body: jsonBody({ status: blocking ? 'BLOCKED' : 'ACTIVE', reason }),
       });
+      const cancelled = data.cancelledAppointments;
+      setDone(
+        blocking
+          ? `${target.name} foi bloqueado(a).` +
+              (cancelled ? ` ${cancelled} consulta${cancelled > 1 ? 's foram canceladas' : ' foi cancelada'} e o outro lado foi avisado.` : '')
+          : `${target.name} foi desbloqueado(a).`,
+      );
       setTarget(null);
       list.reload();
     } catch (err) {
@@ -482,6 +491,7 @@ export function AdminUsersPage() {
         <button className="btn btn-primary self-end"><Search className="size-5" /> Filtrar</button>
       </form>
       {list.error && <Notice kind="error">{list.error}</Notice>}
+      {done && <div className="mb-3"><Notice kind="success">{done}</Notice></div>}
       {list.loading ? (
         <SkeletonCards count={6} lines={1} action label="Carregando usuários..." />
       ) : (
@@ -524,7 +534,14 @@ export function AdminUsersPage() {
       <Modal open={Boolean(target)} title={target?.status === 'ACTIVE' ? 'Bloquear usuário' : 'Desbloquear usuário'} onClose={() => setTarget(null)}>
         {target && (
           <div className="space-y-4">
-            {target.status === 'ACTIVE' && <Notice kind="warning">{target.name} perde o acesso na hora: todas as sessões são encerradas.</Notice>}
+            {target.status === 'ACTIVE' && (
+              <Notice kind="warning">
+                {target.name} perde o acesso na hora: todas as sessões são encerradas.{' '}
+                {target.role === 'PROFESSIONAL'
+                  ? 'As consultas futuras com este médico são canceladas e os pacientes, avisados.'
+                  : 'As consultas futuras desta conta (e dos dependentes) são canceladas e os médicos, avisados.'}
+              </Notice>
+            )}
             <TextArea label="Motivo (fica na auditoria)" required maxLength={500} value={reason} onChange={(e) => setReason(e.target.value)} />
             {error && <Notice kind="error">{error}</Notice>}
             <div className="flex justify-end gap-2">
@@ -545,8 +562,29 @@ export function AdminCampaignsPage() {
   const empty = { title: '', type: 'VACINACAO', agency: '', targetAudience: '', requirements: '', location: '', startsAt: '', endsAt: '', sourceUrl: 'https://www.gov.br/saude/pt-br' };
   const [form, setForm] = useState(empty);
   const [open, setOpen] = useState(false);
+  const [editing, setEditing] = useState<Campaign | null>(null);
+  const [archiving, setArchiving] = useState<Campaign | null>(null);
+  const [warning, setWarning] = useState('');
   const [error, setError] = useState('');
   const [busy, setBusy] = useState(false);
+  const dayOf = (iso: string) => new Date(iso).toLocaleDateString('sv-SE', { timeZone: 'America/Recife' });
+
+  function startEdit(campaign: Campaign) {
+    setError('');
+    setEditing(campaign);
+    setForm({
+      title: campaign.title,
+      type: campaign.type,
+      agency: campaign.agency,
+      targetAudience: campaign.targetAudience,
+      requirements: campaign.requirements,
+      location: campaign.location,
+      startsAt: dayOf(campaign.startsAt),
+      endsAt: dayOf(campaign.endsAt),
+      sourceUrl: campaign.sourceUrl,
+    });
+    setOpen(true);
+  }
 
   async function act(path: string, method: 'PATCH' | 'DELETE' = 'PATCH') {
     setError('');
@@ -563,11 +601,17 @@ export function AdminCampaignsPage() {
     setBusy(true);
     setError('');
     try {
-      await request('/campaigns', {
-        method: 'POST',
+      const response = await request<{ data: { possibleDuplicate?: boolean } }>(editing ? `/campaigns/admin/${editing.id}` : '/campaigns', {
+        method: editing ? 'PATCH' : 'POST',
         body: jsonBody({ ...form, startsAt: new Date(`${form.startsAt}T00:00:00-03:00`).toISOString(), endsAt: new Date(`${form.endsAt}T23:59:00-03:00`).toISOString() }),
       });
+      setWarning(
+        response.data.possibleDuplicate
+          ? 'Rascunho salvo, mas já existe uma campanha com o mesmo título e órgão no mesmo período. Confira se não é repetida.'
+          : '',
+      );
       setOpen(false);
+      setEditing(null);
       setForm(empty);
       list.reload();
     } catch (err) {
@@ -579,8 +623,9 @@ export function AdminCampaignsPage() {
 
   return (
     <div>
-      <PageHeader title="Campanhas" subtitle="Rascunho → revisão → publicação. Toda campanha precisa de fonte oficial." action={<button className="btn btn-primary" onClick={() => { setError(''); setOpen(true); }}>Nova campanha</button>} />
+      <PageHeader title="Campanhas" subtitle="Rascunho → revisão → publicação. Toda campanha precisa de fonte oficial." action={<button className="btn btn-primary" onClick={() => { setError(''); setEditing(null); setForm(empty); setOpen(true); }}>Nova campanha</button>} />
       {error && <div className="mb-3"><Notice kind="error">{error}</Notice></div>}
+      {warning && <div className="mb-3"><Notice kind="warning">{warning}</Notice></div>}
       {list.loading ? (
         <SkeletonCards count={3} lines={3} action label="Carregando campanhas..." />
       ) : list.data?.data.length ? (
@@ -593,7 +638,8 @@ export function AdminCampaignsPage() {
               </div>
               {campaign.status === 'DRAFT' && <button className="btn btn-secondary" onClick={() => void act(`/campaigns/admin/${campaign.id}/review`)}>Enviar para revisão</button>}
               {campaign.status === 'UNDER_REVIEW' && <button className="btn btn-primary" onClick={() => void act(`/campaigns/admin/${campaign.id}/publish`)}>Publicar</button>}
-              {campaign.status !== 'ARCHIVED' && <button className="btn btn-ghost text-danger" onClick={() => void act(`/campaigns/admin/${campaign.id}`, 'DELETE')}>Arquivar</button>}
+              {campaign.status !== 'ARCHIVED' && <button className="btn btn-secondary" onClick={() => startEdit(campaign)}>Editar</button>}
+              {campaign.status !== 'ARCHIVED' && <button className="btn btn-ghost text-danger" onClick={() => setArchiving(campaign)}>Arquivar</button>}
             </li>
           ))}
         </ul>
@@ -601,8 +647,34 @@ export function AdminCampaignsPage() {
         <EmptyState icon={<Megaphone className="size-7" />} title="Nenhuma campanha" />
       )}
 
-      <Modal open={open} title="Nova campanha" onClose={() => setOpen(false)}>
+      <Modal open={Boolean(archiving)} title="Arquivar campanha" onClose={() => setArchiving(null)}>
+        {archiving && (
+          <div className="space-y-4">
+            <p>
+              <strong>{archiving.title}</strong> sai da lista dos pacientes e não pode mais ser editada nem publicada de novo.
+            </p>
+            <div className="flex justify-end gap-2">
+              <button className="btn btn-secondary" onClick={() => setArchiving(null)}>Cancelar</button>
+              <button
+                className="btn btn-danger"
+                onClick={() => {
+                  const id = archiving.id;
+                  setArchiving(null);
+                  void act(`/campaigns/admin/${id}`, 'DELETE');
+                }}
+              >
+                Arquivar
+              </button>
+            </div>
+          </div>
+        )}
+      </Modal>
+
+      <Modal open={open} title={editing ? 'Editar campanha' : 'Nova campanha'} onClose={() => setOpen(false)}>
         <form className="space-y-3" onSubmit={(e) => void create(e)}>
+          {editing && editing.status !== 'DRAFT' && (
+            <Notice kind="info">Ao salvar, a campanha volta para rascunho e precisa passar pela revisão de novo antes de aparecer para os pacientes.</Notice>
+          )}
           <Field label="Título" required value={form.title} onChange={(e) => setForm({ ...form, title: e.target.value })} />
           <div className="grid grid-cols-2 gap-3">
             <SelectField label="Tipo" value={form.type} onChange={(e) => setForm({ ...form, type: e.target.value })}>
@@ -621,7 +693,7 @@ export function AdminCampaignsPage() {
           {error && <Notice kind="error">{error}</Notice>}
           <div className="flex justify-end gap-2">
             <button type="button" className="btn btn-secondary" onClick={() => setOpen(false)}>Cancelar</button>
-            <button className="btn btn-primary" disabled={busy}>Salvar rascunho</button>
+            <button className="btn btn-primary" disabled={busy}>{editing ? 'Salvar alterações' : 'Salvar rascunho'}</button>
           </div>
         </form>
       </Modal>
@@ -933,7 +1005,7 @@ export function AdminSafetyAlertsPage() {
             />
             {target.holder.status === 'ACTIVE' && (
               <Checkbox checked={block} onChange={setBlock}>
-                Bloquear a conta de {target.holder.name} (encerra as sessões e impede novos agendamentos).
+                Bloquear a conta de {target.holder.name} (encerra as sessões, impede novos agendamentos e cancela as consultas já marcadas, avisando os médicos).
               </Checkbox>
             )}
             {block && (

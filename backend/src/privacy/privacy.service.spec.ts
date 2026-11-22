@@ -238,10 +238,25 @@ describe('PrivacyService', () => {
     passwordHashService.verify.mockResolvedValue(true);
     tx.privacyRequest.create.mockResolvedValue({ id: 'privacy-request-id' });
     tx.privacyRequest.update.mockResolvedValue({ id: 'privacy-request-id', status: 'COMPLETED' });
-    tx.appointment.findMany.mockResolvedValue([{ id: 'appointment-id', slotId: 'slot-id' }]);
+    tx.appointment.findMany.mockResolvedValue([
+      {
+        id: 'appointment-id',
+        slotId: 'slot-id',
+        serviceNameSnapshot: 'Consulta',
+        clinicNameSnapshot: 'Clínica Vida',
+        professional: { userId: 'doctor-user-id' },
+        slot: { startsAt: new Date('2026-12-01T13:00:00Z') },
+      },
+    ]);
     tx.professional.findUnique.mockResolvedValue(null);
 
     const result = await service.requestAccountDeletion('user-id', 'senha-correta');
+
+    // O médico fica sabendo que o horário vagou, sem o nome de quem pediu para apagar os dados.
+    const aviso = tx.notification.createMany.mock.calls[0][0].data[0];
+    expect(aviso).toMatchObject({ userId: 'doctor-user-id', type: 'APPOINTMENT_CANCELLED' });
+    expect(aviso.message).toContain('Um paciente encerrou a conta');
+    expect(aviso.message).toContain('01/12');
 
     expect(authSessionsService.revokeAllForUser).toHaveBeenCalledWith('user-id', tx);
     expect(tx.appointment.update).toHaveBeenCalledWith({

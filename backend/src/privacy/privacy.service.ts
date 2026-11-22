@@ -1,3 +1,4 @@
+import { consultaWhen } from '../common/format/when';
 import {
   ForbiddenException,
   Inject,
@@ -369,7 +370,14 @@ export class PrivacyService {
         status: AppointmentStatus.CONFIRMED,
         slot: { startsAt: { gt: now } },
       },
-      select: { id: true, slotId: true },
+      select: {
+        id: true,
+        slotId: true,
+        serviceNameSnapshot: true,
+        clinicNameSnapshot: true,
+        professional: { select: { userId: true } },
+        slot: { select: { startsAt: true } },
+      },
     });
     for (const appointment of upcoming) {
       await tx.appointment.update({
@@ -383,6 +391,21 @@ export class PrivacyService {
       await tx.availabilitySlot.updateMany({
         where: { id: appointment.slotId, status: 'BOOKED' },
         data: { status: 'AVAILABLE' },
+      });
+    }
+    // O médico fica sabendo que o horário vagou. Sem o nome do paciente: ele pediu para apagar os dados.
+    if (upcoming.length) {
+      await tx.notification.createMany({
+        data: upcoming.map((item) => ({
+          userId: item.professional.userId,
+          type: 'APPOINTMENT_CANCELLED',
+          title: 'Consulta cancelada',
+          message:
+            `Um paciente encerrou a conta no LifeHub, e a consulta de ${item.serviceNameSnapshot} de ` +
+            `${consultaWhen(item.slot.startsAt)} em ${item.clinicNameSnapshot} foi cancelada. O horário voltou a ficar livre.`,
+          deduplicationKey: `PATIENT_ACCOUNT_DELETED:${item.id}`,
+        })),
+        skipDuplicates: true,
       });
     }
 
@@ -423,7 +446,7 @@ export class PrivacyService {
             title: 'Consulta cancelada',
             message:
               `Sua consulta de ${item.serviceNameSnapshot} em ${item.clinicNameSnapshot}, marcada para ` +
-              item.slot.startsAt.toLocaleString('pt-BR', { timeZone: 'America/Recife', day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' }) +
+              consultaWhen(item.slot.startsAt) +
               ', foi cancelada porque o médico encerrou a conta no LifeHub. Você pode agendar com outro médico.',
             deduplicationKey: `PROFESSIONAL_ACCOUNT_DELETED:${item.id}`,
           })),
