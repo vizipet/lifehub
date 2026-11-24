@@ -273,6 +273,7 @@ describe('PrivacyService', () => {
       where: { holderId: 'user-id' },
       data: expect.objectContaining({ name: 'Paciente removido', cpfHash: null, cpfEncrypted: null }),
     });
+    expect(tx.patientPhoto.deleteMany).toHaveBeenCalledWith({ where: { patient: { holderId: 'user-id' } } });
     expect(tx.notification.deleteMany).toHaveBeenCalledWith({ where: { userId: 'user-id' } });
     const anonymized = tx.user.update.mock.calls.at(-1)[0].data;
     expect(anonymized).toMatchObject({ name: 'Conta excluída', phone: '', status: 'DELETED' });

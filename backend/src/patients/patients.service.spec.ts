@@ -25,6 +25,7 @@ describe('PatientsService', () => {
       count: jest.fn(),
       create: jest.fn(),
       update: jest.fn(),
+      updateMany: jest.fn(),
     },
     patientPhoto: { deleteMany: jest.fn(), upsert: jest.fn() },
     appointment: { count: jest.fn() },
@@ -176,5 +177,32 @@ describe('PatientsService', () => {
       where: { id: 'patient-id' },
       data: { deletedAt: expect.any(Date), cpfHash: null, cpfEncrypted: null, cpfLast2: null },
     });
+    expect(prisma.patientPhoto.deleteMany).toHaveBeenCalledWith({ where: { patientId: 'patient-id' } });
+  });
+
+  it('não permite ler a foto de outro titular', async () => {
+    prisma.patient.findFirst.mockResolvedValue(null);
+    await expect(service.readPhoto('patient-id', 'outra-conta')).rejects.toBeInstanceOf(NotFoundException);
+    expect(prisma.patient.findFirst).toHaveBeenCalledWith(expect.objectContaining({
+      where: { id: 'patient-id', holderId: 'outra-conta', deletedAt: null, holder: { status: 'ACTIVE' } },
+    }));
+  });
+
+  it('não permite enviar uma foto sem autorização', async () => {
+    await expect(service.uploadPhoto('patient-id', 'holder-id', { buffer: Buffer.alloc(0), size: 0 }, false))
+      .rejects.toBeInstanceOf(BadRequestException);
+    expect(prisma.patient.updateMany).not.toHaveBeenCalled();
+  });
+
+  it('não permite apagar a foto de outro titular', async () => {
+    prisma.patient.updateMany.mockResolvedValue({ count: 0 });
+    await expect(service.removePhoto('patient-id', 'outra-conta')).rejects.toBeInstanceOf(NotFoundException);
+    expect(prisma.patientPhoto.deleteMany).not.toHaveBeenCalled();
+  });
+
+  it('apaga a foto quando o titular solicita', async () => {
+    prisma.patient.updateMany.mockResolvedValue({ count: 1 });
+    await service.removePhoto('patient-id', 'holder-id');
+    expect(prisma.patientPhoto.deleteMany).toHaveBeenCalledWith({ where: { patientId: 'patient-id' } });
   });
 });
