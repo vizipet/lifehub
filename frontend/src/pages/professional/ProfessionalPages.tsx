@@ -10,6 +10,7 @@ import { EmptyState, Field, Modal, Notice, PageHeader, SelectField, SkeletonCard
 import { useProfessional } from './useProfessional';
 import { ProfilePhoto } from './ProfilePhoto';
 import { CARD_LEAVE_MS } from '../patient/AppointmentsPage';
+import { Teleconsultation } from '../../ui/Teleconsultation';
 
 const UFS = ['AC', 'AL', 'AP', 'AM', 'BA', 'CE', 'DF', 'ES', 'GO', 'MA', 'MT', 'MS', 'MG', 'PA', 'PB', 'PR', 'PE', 'PI', 'RJ', 'RN', 'RS', 'RO', 'RR', 'SC', 'SP', 'SE', 'TO'];
 
@@ -235,6 +236,7 @@ export function ProfessionalDashboard() {
                     </Tooltip>
                   </div>
                   )}
+                  {agendaView === 'open' && <Teleconsultation appointment={item} />}
                   {agendaView !== 'open' && item.cancellationReason && (
                     <p className="w-full text-sm text-muted">Motivo: {item.cancellationReason}</p>
                   )}

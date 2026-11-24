@@ -182,11 +182,10 @@ async listForUser(
     default:
       viewFilter = {
         status: AppointmentStatus.CONFIRMED,
-        slot: {
-          startsAt: {
-            gt: now,
-          },
-        },
+        OR: [
+          { slot: { startsAt: { gt: now } } },
+          { serviceModalitySnapshot: 'REMOTE', slot: { endsAt: { gt: now } } },
+        ],
       };
       break;
   }

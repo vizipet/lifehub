@@ -24,7 +24,7 @@ export interface ApiEnvelope<T> {
   data: T;
 }
 
-const API_BASE = (import.meta.env.VITE_API_BASE_URL || 'http://localhost:3000/api/v1')
+const API_BASE = (import.meta.env.DEV ? '/api/v1' : (import.meta.env.VITE_API_BASE_URL || 'http://localhost:3000/api/v1'))
   .replace(/\/+$/, '');
 const ACCESS_TOKEN_KEY = 'lifehub.accessToken';
 const REFRESH_TOKEN_KEY = 'lifehub.refreshToken';

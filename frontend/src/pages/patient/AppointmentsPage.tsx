@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { Teleconsultation } from '../../ui/Teleconsultation';
 import { CalendarDays, MapPin, Video } from 'lucide-react';
 import { Link } from 'react-router-dom';
 import { jsonBody, messageOf, request } from '../../api';
@@ -71,6 +72,7 @@ export function AppointmentCard({
           {appointment.cancellationReason && <p className="mt-1 text-danger">Motivo: {appointment.cancellationReason}</p>}
         </div>
       </div>
+      <Teleconsultation appointment={appointment} />
       {onRevokePhoto && appointment.photoShared && <button className="btn btn-ghost mt-2 text-sm" onClick={() => onRevokePhoto(appointment)}>Parar de compartilhar foto</button>}
       {onCancel && appointment.status === 'CONFIRMED' && new Date(start) > new Date() && (
         <div className="mt-3 flex justify-end">

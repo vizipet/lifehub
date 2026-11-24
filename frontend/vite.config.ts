@@ -21,7 +21,7 @@ function contentSecurityPolicy(): Plugin {
         "font-src 'self'",
         `img-src 'self' data: blob: ${apiOrigins}`,
         `connect-src 'self' ${apiOrigins} https://viacep.com.br`,
-        "frame-src https://www.openstreetmap.org",
+        "frame-src https://www.openstreetmap.org https://*.daily.co",
         "object-src 'none'",
         "base-uri 'self'",
         "form-action 'self'",
@@ -33,7 +33,7 @@ function contentSecurityPolicy(): Plugin {
 
 export default defineConfig({
   plugins: [react(), tailwindcss(), contentSecurityPolicy()],
-  server: { host: '127.0.0.1', port: 5173, strictPort: true },
+  server: { host: process.env.LIFEHUB_LAN === 'true' ? '0.0.0.0' : '127.0.0.1', port: 5173, strictPort: true, proxy: { '/api/v1': { target: 'http://127.0.0.1:3000', changeOrigin: true } } },
   preview: { host: '127.0.0.1', port: 5173, strictPort: true },
   build: {
     outDir: 'dist',

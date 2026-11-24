@@ -10,6 +10,9 @@ import { AppointmentsController } from './appointments.controller';
 import { AppointmentsService } from './appointments.service';
 import { AppointmentExpirationService } from './appointment-expiration.service';
 
+import { TeleconsultationService } from './teleconsultation.service';
+import { TeleconsultationController } from './teleconsultation.controller';
+
 @Module({
   imports: [
     AuthModule,
@@ -20,7 +23,7 @@ import { AppointmentExpirationService } from './appointment-expiration.service';
     AvailabilityModule,
     NotificationsModule,
   ],
-  controllers: [AppointmentsController],
-  providers: [AppointmentsService, AppointmentExpirationService],
+  controllers: [AppointmentsController, TeleconsultationController],
+  providers: [AppointmentsService, AppointmentExpirationService, TeleconsultationService],
 })
 export class AppointmentsModule {}
