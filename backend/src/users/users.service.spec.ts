@@ -19,7 +19,7 @@ describe('UsersService', () => {
       create: jest.fn(),
       update: jest.fn(),
     },
-    patient: { create: jest.fn() },
+    patient: { create: jest.fn(), updateMany: jest.fn() },
     legalAcceptance: { createMany: jest.fn() },
     notificationPreference: { create: jest.fn() },
   };
@@ -194,6 +194,11 @@ describe('UsersService', () => {
       }),
     );
 
+    expect(prismaService.$transaction).toHaveBeenCalled();
+    expect(prismaService.patient.updateMany).toHaveBeenCalledWith({
+      where: { holderId: 'user-id', relationship: 'SELF', deletedAt: null },
+      data: { name: 'Jose Atualizado' },
+    });
     expect(result).not.toHaveProperty('passwordHash');
   });
 

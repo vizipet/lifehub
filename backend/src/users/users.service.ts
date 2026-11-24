@@ -153,6 +153,14 @@ export class UsersService {
         select: PUBLIC_USER_SELECT,
       });
 
+      if (dto.name !== undefined) {
+        // Keep the account and the SELF patient in sync, without changing dependent names.
+        await db.patient.updateMany({
+          where: { holderId: userId, relationship: 'SELF', deletedAt: null },
+          data: { name: updatedUser.name },
+        });
+      }
+
       if (passwordWillChange) {
         await this.authSessionsService.revokeAllForUser(
           userId,
@@ -163,7 +171,7 @@ export class UsersService {
       return toPublicUser(updatedUser);
     };
 
-    if (!sensitiveChange) return update(this.prisma);
+    if (!sensitiveChange && dto.name === undefined) return update(this.prisma);
 
     return this.prisma.$transaction(async (tx) => {
       // Serialize credential changes with password recovery and deletion requests.
@@ -171,8 +179,7 @@ export class UsersService {
       const current = await tx.user.findUnique({ where: { id: userId } });
       if (
         !current ||
-        current.passwordHash !== user.passwordHash ||
-        current.email !== user.email
+        (sensitiveChange && (current.passwordHash !== user.passwordHash || current.email !== user.email))
       ) {
         throw new UnauthorizedException({
           code: 'INVALID_CURRENT_PASSWORD',

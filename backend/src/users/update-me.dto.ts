@@ -11,6 +11,7 @@ import {
 
 export class UpdateMeDto {
   @ApiPropertyOptional({ example: 'Mariana Costa' })
+  @Transform(({ value }) => (typeof value === 'string' ? value.trim() : value))
   @IsOptional()
   @IsString()
   @MinLength(3)
