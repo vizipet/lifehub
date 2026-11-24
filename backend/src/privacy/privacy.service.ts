@@ -123,6 +123,7 @@ export class PrivacyService {
           sex: true,
           cpfEncrypted: true,
           guardianConsentAt: true,
+          photo: { select: { bytes: true } },
           deletedAt: true,
           createdAt: true,
           updatedAt: true,
@@ -251,10 +252,11 @@ export class PrivacyService {
           };
         })()
       : null;
-    const patients = patientRows.map(({ cpfEncrypted, birthDate, ...rest }) => ({
+    const patients = patientRows.map(({ cpfEncrypted, birthDate, photo, ...rest }) => ({
       ...rest,
       birthDate: birthDate.toISOString().slice(0, 10),
       cpf: this.cpf.reveal(cpfEncrypted),
+      photo: photo ? { mimeType: 'image/jpeg', base64: Buffer.from(photo.bytes).toString('base64') } : null,
     }));
 
     return {
@@ -472,6 +474,7 @@ export class PrivacyService {
       },
     });
 
+    await tx.patientPhoto.deleteMany({ where: { patient: { holderId: userId } } });
     await tx.notification.deleteMany({ where: { userId } });
     await tx.passwordResetToken.deleteMany({ where: { userId } });
     await tx.idempotencyKey.deleteMany({ where: { userId } });

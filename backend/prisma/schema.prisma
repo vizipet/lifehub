@@ -148,6 +148,7 @@ model Patient {
   holder       User          @relation(fields: [holderId], references: [id], onDelete: Restrict)
   appointments Appointment[]
   safetyAlerts SafetyAlert[]
+  photo        PatientPhoto?
 
   @@unique([holderId, cpfHash])
   @@index([holderId])
@@ -669,4 +670,13 @@ model SafetyAlert {
   @@index([status, createdAt])
   @@index([holderId])
   @@map("safety_alerts")
+}
+
+model PatientPhoto {
+  patientId String   @id @map("patient_id") @db.Uuid
+  bytes     Bytes
+  updatedAt DateTime @updatedAt @map("updated_at") @db.Timestamptz(6)
+  patient   Patient  @relation(fields: [patientId], references: [id], onDelete: Cascade)
+
+  @@map("patient_photos")
 }

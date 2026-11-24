@@ -26,6 +26,7 @@ describe('PatientsService', () => {
       create: jest.fn(),
       update: jest.fn(),
     },
+    patientPhoto: { deleteMany: jest.fn(), upsert: jest.fn() },
     appointment: { count: jest.fn() },
     user: { findFirst: jest.fn() },
     safetyAlert: { findFirst: jest.fn(), create: jest.fn() },
@@ -47,7 +48,7 @@ describe('PatientsService', () => {
     prisma.user.findFirst.mockResolvedValue(null);
     prisma.safetyAlert.findFirst.mockResolvedValue(null);
     prisma.safetyAlert.create.mockResolvedValue({ id: 'alert-id' });
-    service = new PatientsService(prisma as unknown as PrismaService, testCpf(), audit as never);
+    service = new PatientsService({ ...prisma, $transaction: (fn: (tx: typeof prisma) => unknown) => fn(prisma) } as unknown as PrismaService, testCpf(), audit as never);
   });
 
   it('calcula idade considerando se o aniversário já passou', () => {

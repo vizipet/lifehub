@@ -3,13 +3,18 @@ import {
   Controller,
   Delete,
   Get,
+  Header,
   HttpCode,
   Param,
   ParseUUIDPipe,
   Patch,
   Post,
+  UploadedFile,
   UseGuards,
+  UseInterceptors,
 } from '@nestjs/common';
+import { FileInterceptor } from '@nestjs/platform-express';
+import { MAX_PATIENT_PHOTO_BYTES } from './patient-photo';
 import {
   ApiBearerAuth,
   ApiCreatedResponse,
@@ -70,6 +75,29 @@ export class PatientsController {
     @Body() dto: UpdatePatientDto,
   ) {
     return { data: await this.patients.updateOwned(id, user.id, dto) };
+  }
+
+  @Get(':id/photo')
+  @Header('Cache-Control', 'private, no-store')
+  @ApiOperation({ summary: 'Consultar foto privada de um paciente da conta' })
+  async readPhoto(@CurrentUser() user: AuthenticatedUser, @Param('id', ParseUUIDPipe) id: string) {
+    return { data: await this.patients.readPhoto(id, user.id) };
+  }
+
+  @Post(':id/photo')
+  @UseInterceptors(FileInterceptor('file', { limits: { fileSize: MAX_PATIENT_PHOTO_BYTES, files: 1, fields: 1 } }))
+  @ApiOperation({ summary: 'Enviar ou trocar foto de titular ou dependente' })
+  async uploadPhoto(@CurrentUser() user: AuthenticatedUser, @Param('id', ParseUUIDPipe) id: string,
+    @UploadedFile() file: { buffer: Buffer; size: number },
+    @Body('authorized') authorized: string) {
+    return { data: await this.patients.uploadPhoto(id, user.id, file, authorized === 'true') };
+  }
+
+  @Delete(':id/photo')
+  @HttpCode(204)
+  @ApiOperation({ summary: 'Remover foto privada de um paciente' })
+  async removePhoto(@CurrentUser() user: AuthenticatedUser, @Param('id', ParseUUIDPipe) id: string) {
+    await this.patients.removePhoto(id, user.id);
   }
 
   @Delete(':id')

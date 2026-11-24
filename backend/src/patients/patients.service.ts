@@ -15,6 +15,7 @@ import {
   openSafetyAlert,
 } from '../safety/safety-alerts';
 import { CreateDependentDto, UpdatePatientDto } from './patient.dto';
+import { validatePatientPhoto } from './patient-photo';
 
 /** Limite simples para evitar abuso de cadastro de dependentes. */
 export const MAX_DEPENDENTS = 10;
@@ -36,6 +37,7 @@ const PATIENT_SELECT = {
   guardianConsentAt: true,
   createdAt: true,
   updatedAt: true,
+  photo: { select: { updatedAt: true } },
 } as const;
 
 type PatientRow = {
@@ -49,6 +51,7 @@ type PatientRow = {
   guardianConsentAt: Date | null;
   createdAt: Date;
   updatedAt: Date;
+  photo?: { updatedAt: Date } | null;
 };
 
 export function calculateAge(birthDate: Date, today = new Date()): number {
@@ -64,13 +67,14 @@ export function calculateAge(birthDate: Date, today = new Date()): number {
 }
 
 function present(patient: PatientRow) {
-  const { cpfLast2, birthDate, ...rest } = patient;
+  const { cpfLast2, birthDate, photo, ...rest } = patient;
   return {
     ...rest,
     birthDate: birthDate.toISOString().slice(0, 10),
     age: calculateAge(birthDate),
     isHolder: patient.relationship === Relationship.SELF,
     cpfMasked: maskCpf(cpfLast2),
+    photoVersion: photo?.updatedAt.toISOString() ?? null,
   };
 }
 
@@ -270,6 +274,47 @@ export class PatientsService {
     return present(patient);
   }
 
+  async readPhoto(patientId: string, holderId: string) {
+    const patient = await this.prisma.patient.findFirst({
+      where: { id: patientId, holderId, deletedAt: null, holder: { status: 'ACTIVE' } },
+      select: { photo: { select: { bytes: true } } },
+    });
+    if (!patient?.photo) throw new NotFoundException('Foto não encontrada.');
+    return { base64: Buffer.from(patient.photo.bytes).toString('base64') };
+  }
+
+  async uploadPhoto(patientId: string, holderId: string, file: { buffer: Buffer; size: number }, authorized: boolean) {
+    if (!authorized) throw new BadRequestException('Confirme a autorização para cadastrar a foto.');
+    const bytes = validatePatientPhoto(file);
+    return this.prisma.$transaction(async (tx) => {
+      // Lock the patient row before changing its photo, serializing with removal.
+      const owned = await tx.patient.updateMany({
+        where: { id: patientId, holderId, deletedAt: null, holder: { status: 'ACTIVE' },
+          OR: [{ relationship: Relationship.SELF }, { guardianConsentAt: { not: null } }] },
+        data: { updatedAt: new Date() },
+      });
+      if (owned.count !== 1) throw new NotFoundException('Paciente não encontrado.');
+      const photo = await tx.patientPhoto.upsert({
+        where: { patientId },
+        create: { patientId, bytes: new Uint8Array(bytes) },
+        update: { bytes: new Uint8Array(bytes) },
+        select: { updatedAt: true },
+      });
+      return { photoVersion: photo.updatedAt.toISOString() };
+    });
+  }
+
+  async removePhoto(patientId: string, holderId: string) {
+    await this.prisma.$transaction(async (tx) => {
+      const owned = await tx.patient.updateMany({
+        where: { id: patientId, holderId, deletedAt: null, holder: { status: 'ACTIVE' } },
+        data: { updatedAt: new Date() },
+      });
+      if (owned.count !== 1) throw new NotFoundException('Paciente não encontrado.');
+      await tx.patientPhoto.deleteMany({ where: { patientId } });
+    });
+  }
+
   async removeOwned(patientId: string, holderId: string): Promise<void> {
     const patient = await this.findOwnedById(patientId, holderId);
 
@@ -295,9 +340,12 @@ export class PatientsService {
     }
 
     // Exclusão lógica: o histórico de consultas continua íntegro.
-    await this.prisma.patient.update({
-      where: { id: patientId },
-      data: { deletedAt: new Date(), cpfHash: null, cpfEncrypted: null, cpfLast2: null },
+    await this.prisma.$transaction(async (tx) => {
+      await tx.patient.update({
+        where: { id: patientId },
+        data: { deletedAt: new Date(), cpfHash: null, cpfEncrypted: null, cpfLast2: null },
+      });
+      await tx.patientPhoto.deleteMany({ where: { patientId } });
     });
   }
 }
