@@ -46,6 +46,9 @@ describe('PatientsService', () => {
   beforeEach(() => {
     jest.resetAllMocks();
     prisma.patient.findMany.mockResolvedValue([]);
+    prisma.patient.findFirst.mockImplementation(async ({ where }) =>
+      where.relationship === 'SELF' ? { birthDate: new Date('1990-05-05T00:00:00Z') } : null,
+    );
     prisma.user.findFirst.mockResolvedValue(null);
     prisma.safetyAlert.findFirst.mockResolvedValue(null);
     prisma.safetyAlert.create.mockResolvedValue({ id: 'alert-id' });
@@ -78,7 +81,7 @@ describe('PatientsService', () => {
 
   it('cadastra dependente com data da declaração do responsável e CPF protegido', async () => {
     prisma.patient.count.mockResolvedValue(0);
-    prisma.patient.findFirst.mockResolvedValue(null);
+    prisma.patient.findFirst.mockResolvedValueOnce(null);
     prisma.patient.create.mockImplementation(async ({ data }) => row({ ...data, id: 'new-id' }));
 
     await service.createDependent('holder-id', { ...dependent, cpf: '390.533.447-05' });
@@ -104,7 +107,7 @@ describe('PatientsService', () => {
 
   it('CPF de dependente que já está em outra conta vira alerta, sem bloquear', async () => {
     prisma.patient.count.mockResolvedValue(0);
-    prisma.patient.findFirst.mockResolvedValue(null);
+    prisma.patient.findFirst.mockResolvedValueOnce(null);
     prisma.patient.findMany.mockResolvedValue([{ holderId: 'outra-conta' }]);
     prisma.patient.create.mockImplementation(async ({ data }) => row({ ...data, id: 'new-id' }));
 
@@ -148,6 +151,46 @@ describe('PatientsService', () => {
     prisma.patient.count.mockResolvedValue(MAX_DEPENDENTS);
     await expect(service.createDependent('holder-id', dependent)).rejects.toBeInstanceOf(BadRequestException);
     expect(prisma.patient.create).not.toHaveBeenCalled();
+  });
+
+  it.each(['1990-05-05', '2002-05-04'])('bloqueia filho com diferença menor que 12 anos: %s', async (birthDate) => {
+    prisma.patient.count.mockResolvedValue(0);
+    await expect(service.createDependent('holder-id', { ...dependent, birthDate }))
+      .rejects.toMatchObject({ response: { code: 'INVALID_FAMILY_AGE_GAP' } });
+    expect(prisma.patient.create).not.toHaveBeenCalled();
+  });
+
+  it('aceita filho com diferença de exatamente 12 anos', async () => {
+    prisma.patient.count.mockResolvedValue(0);
+    prisma.patient.create.mockImplementation(async ({ data }) => row(data));
+    await expect(service.createDependent('holder-id', { ...dependent, birthDate: '2002-05-05' })).resolves.toBeDefined();
+  });
+
+  it('bloqueia pai mais novo que o titular', async () => {
+    prisma.patient.count.mockResolvedValue(0);
+    await expect(service.createDependent('holder-id', { ...dependent, relationship: 'PARENT' }))
+      .rejects.toMatchObject({ response: { code: 'INVALID_FAMILY_AGE_GAP' } });
+    expect(prisma.patient.create).not.toHaveBeenCalled();
+  });
+
+  it('permite cônjuge com a mesma data de nascimento', async () => {
+    prisma.patient.count.mockResolvedValue(0);
+    prisma.patient.create.mockImplementation(async ({ data }) => row(data));
+    await expect(service.createDependent('holder-id', { ...dependent, relationship: 'SPOUSE', birthDate: '1990-05-05' })).resolves.toBeDefined();
+  });
+
+  it('valida a data na edição usando o parentesco existente', async () => {
+    prisma.patient.findFirst.mockResolvedValueOnce(row());
+    await expect(service.updateOwned('patient-id', 'holder-id', { birthDate: '2002-05-04' }))
+      .rejects.toMatchObject({ response: { code: 'INVALID_FAMILY_AGE_GAP' } });
+    expect(prisma.patient.update).not.toHaveBeenCalled();
+  });
+
+  it('valida a alteração de parentesco usando a data existente', async () => {
+    prisma.patient.findFirst.mockResolvedValueOnce(row({ relationship: 'OTHER', birthDate: new Date('1990-05-05T00:00:00Z') }));
+    await expect(service.updateOwned('patient-id', 'holder-id', { relationship: 'CHILD' }))
+      .rejects.toMatchObject({ response: { code: 'INVALID_FAMILY_AGE_GAP' } });
+    expect(prisma.patient.update).not.toHaveBeenCalled();
   });
 
   it('não deixa trocar nome ou nascimento do titular por aqui', async () => {

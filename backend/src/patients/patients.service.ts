@@ -19,6 +19,8 @@ import { validatePatientPhoto } from './patient-photo';
 
 /** Limite simples para evitar abuso de cadastro de dependentes. */
 export const MAX_DEPENDENTS = 10;
+// Regra de coerência cadastral, não uma afirmação sobre fertilidade.
+export const MIN_PARENT_AGE_GAP = 12;
 
 export interface OwnedPatient {
   id: string;
@@ -180,6 +182,27 @@ export class PatientsService {
     return { id: patient.id, holderId: patient.holderId, name: patient.name };
   }
 
+  private async validateFamilyAge(holderId: string, relationship: Relationship, birthDate: string) {
+    if (relationship !== Relationship.CHILD && relationship !== Relationship.PARENT) return;
+    const holder = await this.prisma.patient.findFirst({
+      where: { holderId, relationship: Relationship.SELF, deletedAt: null },
+      select: { birthDate: true },
+    });
+    if (!holder) throw new NotFoundException('Cadastro do titular não encontrado.');
+    const dependentBirth = new Date(`${birthDate}T00:00:00Z`);
+    const gap = relationship === Relationship.CHILD
+      ? calculateAge(holder.birthDate, dependentBirth)
+      : calculateAge(dependentBirth, holder.birthDate);
+    if (gap < MIN_PARENT_AGE_GAP) {
+      throw new BadRequestException({
+        code: 'INVALID_FAMILY_AGE_GAP',
+        message: relationship === Relationship.CHILD
+          ? `O filho deve ser pelo menos ${MIN_PARENT_AGE_GAP} anos mais novo que o titular. Confira o parentesco e a data de nascimento.`
+          : `O pai ou a mãe deve ser pelo menos ${MIN_PARENT_AGE_GAP} anos mais velho que o titular. Confira o parentesco e a data de nascimento.`,
+      });
+    }
+  }
+
   async createDependent(holderId: string, dto: CreateDependentDto) {
     const count = await this.prisma.patient.count({
       where: { holderId, deletedAt: null, relationship: { not: Relationship.SELF } },
@@ -205,6 +228,8 @@ export class PatientsService {
         });
       }
     }
+
+    await this.validateFamilyAge(holderId, dto.relationship, dto.birthDate);
 
     try {
       const patient = await this.prisma.patient.create({
@@ -257,6 +282,10 @@ export class PatientsService {
         code: 'HOLDER_FIELDS_LOCKED',
         message: 'Altere seus próprios dados em "Meu perfil".',
       });
+    }
+
+    if (!current.isHolder) {
+      await this.validateFamilyAge(holderId, dto.relationship ?? current.relationship, dto.birthDate ?? current.birthDate);
     }
 
     const patient = await this.prisma.patient.update({
