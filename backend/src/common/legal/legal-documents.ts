@@ -6,7 +6,7 @@ import { LegalDocumentType } from '../../generated/prisma/enums';
  */
 export const CURRENT_LEGAL_VERSIONS: Record<LegalDocumentType, string> = {
   [LegalDocumentType.TERMS_OF_USE]: '1.0',
-  [LegalDocumentType.PRIVACY_POLICY]: '1.0',
+  [LegalDocumentType.PRIVACY_POLICY]: '1.1',
   [LegalDocumentType.HEALTH_DATA_CONSENT]: '1.0',
 };
 

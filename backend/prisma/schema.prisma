@@ -390,6 +390,8 @@ model Appointment {
   clinicId           String            @map("clinic_id") @db.Uuid
   slotId             String            @map("slot_id") @db.Uuid
   status             AppointmentStatus @default(CONFIRMED)
+  photoConsentAt     DateTime?         @map("photo_consent_at") @db.Timestamptz(6)
+  photoConsentRevokedAt DateTime?       @map("photo_consent_revoked_at") @db.Timestamptz(6)
   cancelledAt        DateTime?         @map("cancelled_at") @db.Timestamptz(6)
   cancellationReason String?           @map("cancellation_reason")
 

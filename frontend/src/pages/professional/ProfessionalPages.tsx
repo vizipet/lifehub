@@ -44,6 +44,39 @@ function needsLinkCheck(item: Appointment) {
   return Boolean(item.patient.guardianName) && item.dependentCheckResult !== 'CONFIRMED';
 }
 
+function SharedPatientAvatar({ item }: { item: Appointment }) {
+  const [photo, setPhoto] = useState<string | null>(null);
+  const permitted = item.photoShared === true && item.status === 'CONFIRMED';
+  useEffect(() => {
+    setPhoto(null);
+    if (!permitted) return;
+    let active = true;
+    let pending = false;
+    async function refresh() {
+      if (!active || pending) return;
+      if (Date.now() >= Date.parse(item.slot.endsAt)) { setPhoto(null); return; }
+      pending = true;
+      try {
+        const res = await request<{ data: { base64: string } }>(`/appointments/${item.id}/patient-photo`, { cache: 'no-store' });
+        if (active && Date.now() < Date.parse(item.slot.endsAt)) setPhoto(res.data.base64);
+      } catch { if (active) setPhoto(null); }
+      finally { pending = false; }
+    }
+    void refresh();
+    // Recheck authorization while the agenda is open, without persisting photos.
+    const timer = window.setInterval(() => void refresh(), 30000);
+    window.addEventListener('focus', refresh);
+    return () => { active = false; window.clearInterval(timer); window.removeEventListener('focus', refresh); };
+  }, [item.id, item.slot.endsAt, permitted]);
+  const words = item.patient.name.trim().split(/\s+/);
+  const initials = (words[0]?.[0] || '') + (words.length > 1 ? words[words.length - 1][0] : '');
+  return (
+    <span className="grid size-12 shrink-0 place-items-center overflow-hidden rounded-full border border-primary bg-soft p-0.5 text-sm font-bold text-primary" aria-hidden>
+      {permitted && photo ? <img className="size-full rounded-full object-cover" alt="" src={'data:image/jpeg;base64,' + photo} onError={() => setPhoto(null)} /> : initials}
+    </span>
+  );
+}
+
 export function ProfessionalDashboard() {
   const { user } = useAuth();
   const pro = useProfessional();
@@ -157,6 +190,7 @@ export function ProfessionalDashboard() {
                     <p className="text-sm text-muted">{dateLong(item.slot.startsAt).split(',')[0]}</p>
                     <p className="text-xl font-black text-primary">{time(item.slot.startsAt)}</p>
                   </div>
+                  <SharedPatientAvatar item={item} />
                   <div className="min-w-0 flex-1">
                     <strong>{item.patient.name}</strong>
                     <p className="text-sm text-muted">

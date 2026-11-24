@@ -1,5 +1,6 @@
 import { ApiProperty } from '@nestjs/swagger';
-import { IsUUID } from 'class-validator';
+import { IsBoolean, IsUUID, ValidateIf } from 'class-validator';
+import { ApiPropertyOptional } from '@nestjs/swagger';
 
 export class CreateAppointmentDto {
   @ApiProperty({
@@ -31,4 +32,9 @@ export class CreateAppointmentDto {
   })
   @IsUUID()
   slotId!: string;
+
+  @ApiPropertyOptional({ default: false, description: 'Autorização opcional para compartilhar a foto com o médico desta consulta.' })
+  @ValidateIf((_, value) => value !== undefined)
+  @IsBoolean()
+  sharePatientPhoto?: boolean;
 }

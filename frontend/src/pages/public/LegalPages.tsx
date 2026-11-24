@@ -22,7 +22,7 @@ function LegalLayout({ title, children }: PropsWithChildren<{ title: string }>) 
         <div className="card space-y-4 p-6 leading-relaxed md:p-8 [&_h2]:mt-6 [&_h2]:text-xl [&_h2]:font-extrabold [&_li]:ml-5 [&_li]:list-disc">
           <h1 className="text-3xl font-black">{title}</h1>
           <p className="text-sm text-muted">
-            Versão {LEGAL_VERSION} · Atualizado em {UPDATED_AT}
+            Versão {title === 'Política de Privacidade' ? '1.1' : LEGAL_VERSION} · Atualizado em {title === 'Política de Privacidade' ? '24 de novembro de 2026' : UPDATED_AT}
           </p>
           <p className="rounded-xl bg-soft p-3 text-sm">
             O LifeHub é um <strong>projeto acadêmico</strong>. Os dados de demonstração são fictícios. Este texto descreve
@@ -91,6 +91,7 @@ export function PrivacyPage() {
       <ul>
         <li><strong>Conta:</strong> nome, e-mail, celular, CPF, data de nascimento e senha (guardada só como hash Argon2).</li>
         <li><strong>Dependentes:</strong> nome, data de nascimento, sexo, parentesco e, se você quiser, CPF.</li>
+        <li><strong>Fotos de perfil:</strong> opcionais, privadas e removíveis pelo titular, inclusive para dependentes.</li>
         <li><strong>Consultas:</strong> médico, clínica, serviço, data, situação e motivo de cancelamento.</li>
         <li><strong>Médicos:</strong> CRM, UF, especialidade, apresentação e documentos enviados para verificação.</li>
         <li><strong>Registros técnicos:</strong> sessões de acesso e aceites destes documentos, com data e versão.</li>
@@ -105,8 +106,7 @@ export function PrivacyPage() {
       </ul>
       <h2>3. Com quem compartilhamos</h2>
       <p>
-        O médico que você escolheu vê apenas o <strong>nome e a idade</strong> do paciente e os dados da consulta. Ele não vê
-        CPF, data de nascimento nem os demais dependentes. Não vendemos nem compartilhamos dados com terceiros.
+        O médico escolhido vê o <strong>nome e a idade</strong> do paciente e os dados da consulta. Se você autorizar separadamente ao agendar, ele também poderá ver a foto de perfil atual do paciente (inclusive futuras substituições) até o fim previsto da consulta, enquanto ela estiver confirmada. Você pode revogar essa autorização na agenda sem cancelar a consulta. Outros médicos não têm acesso à foto. Ele não vê CPF, data de nascimento nem os demais dependentes. Não vendemos dados pessoais.
       </p>
       <h2>4. Como protegemos</h2>
       <ul>

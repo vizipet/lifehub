@@ -188,6 +188,8 @@ export class PrivacyService {
           status: true,
           cancelledAt: true,
           cancellationReason: true,
+          photoConsentAt: true,
+          photoConsentRevokedAt: true,
           serviceNameSnapshot: true,
           serviceDurationMinutesSnapshot: true,
           serviceModalitySnapshot: true,

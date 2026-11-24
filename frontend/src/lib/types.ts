@@ -26,6 +26,7 @@ export interface Patient {
   sex: Sex;
   isHolder: boolean;
   cpfMasked: string | null;
+  photoVersion?: string | null;
 }
 
 export interface Specialty {
@@ -99,6 +100,7 @@ export interface Appointment {
   patient: { name: string; relationship: Relationship; age: number; guardianName?: string };
   dependentCheckResult?: 'CONFIRMED' | 'MISMATCH' | null;
   dependentCheckedAt?: string | null;
+  photoShared?: boolean;
 }
 
 export interface Campaign {

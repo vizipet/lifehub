@@ -1,7 +1,10 @@
 import {
   Body,
   Controller,
+  Delete,
   Get,
+  Header,
+  HttpCode,
   Headers,
   Param,
   ParseUUIDPipe,
@@ -67,6 +70,22 @@ export class AppointmentsController {
       data: appointments,
     };
   }
+  @Get(':id/patient-photo')
+  @Roles(UserRole.PROFESSIONAL)
+  @Header('Cache-Control', 'private, no-store')
+  @ApiOperation({ summary: 'Foto autorizada para esta consulta' })
+  async readPatientPhoto(@CurrentUser() user: AuthenticatedUser, @Param('id', ParseUUIDPipe) id: string) {
+    return { data: await this.appointmentsService.readSharedPatientPhoto(user.id, id) };
+  }
+
+  @Delete(':id/patient-photo')
+  @Roles(UserRole.PATIENT)
+  @HttpCode(204)
+  @ApiOperation({ summary: 'Revogar compartilhamento da foto desta consulta' })
+  async revokePatientPhoto(@CurrentUser() user: AuthenticatedUser, @Param('id', ParseUUIDPipe) id: string) {
+    await this.appointmentsService.revokeSharedPatientPhoto(user.id, id);
+  }
+
 @Patch(':id/cancel')
 @Roles(UserRole.PATIENT, UserRole.PROFESSIONAL)
 @ApiOperation({

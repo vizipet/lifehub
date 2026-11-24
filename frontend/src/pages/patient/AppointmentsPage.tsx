@@ -34,10 +34,12 @@ export const CARD_LEAVE_MS = 300;
 export function AppointmentCard({
   appointment,
   onCancel,
+  onRevokePhoto,
   leaving = false,
 }: {
   appointment: Appointment;
   onCancel?: (appointment: Appointment) => void;
+  onRevokePhoto?: (appointment: Appointment) => void;
   leaving?: boolean;
 }) {
   const start = appointment.slot.startsAt;
@@ -69,6 +71,7 @@ export function AppointmentCard({
           {appointment.cancellationReason && <p className="mt-1 text-danger">Motivo: {appointment.cancellationReason}</p>}
         </div>
       </div>
+      {onRevokePhoto && appointment.photoShared && <button className="btn btn-ghost mt-2 text-sm" onClick={() => onRevokePhoto(appointment)}>Parar de compartilhar foto</button>}
       {onCancel && appointment.status === 'CONFIRMED' && new Date(start) > new Date() && (
         <div className="mt-3 flex justify-end">
           <button className="btn btn-secondary border-danger text-danger" onClick={() => onCancel(appointment)}>Cancelar consulta</button>
@@ -82,11 +85,25 @@ export function AppointmentsPage() {
   const [view, setView] = useState<(typeof VIEWS)[number]['value']>('upcoming');
   const list = useApi<{ data: Appointment[] }>(`/appointments?view=${view}`);
   const [target, setTarget] = useState<Appointment | null>(null);
+  const [photoTarget, setPhotoTarget] = useState<Appointment | null>(null);
   const [reason, setReason] = useState(REASONS[0]);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
   const [message, setMessage] = useState('');
   const [leavingId, setLeavingId] = useState<string | null>(null);
+
+  async function revokePhoto() {
+    if (!photoTarget || busy) return;
+    setBusy(true);
+    setError('');
+    try {
+      await request(`/appointments/${photoTarget.id}/patient-photo`, { method: 'DELETE' });
+      setPhotoTarget(null);
+      setMessage('Compartilhamento da foto revogado. Sua consulta continua agendada.');
+      list.reload({ quiet: true });
+    } catch (err) { setError(messageOf(err)); }
+    finally { setBusy(false); }
+  }
 
   async function cancel() {
     if (!target) return;
@@ -142,6 +159,7 @@ export function AppointmentsPage() {
               appointment={appointment}
               leaving={appointment.id === leavingId}
               onCancel={(item) => { setTarget(item); setError(''); }}
+              onRevokePhoto={(item) => { setPhotoTarget(item); setError(''); }}
             />
           ))}
         </div>
@@ -155,6 +173,14 @@ export function AppointmentsPage() {
         </EmptyState>
       )}
 
+      <Modal open={Boolean(photoTarget)} title="Parar de compartilhar foto?" onClose={() => { if (!busy) setPhotoTarget(null); }}>
+        <p>O médico não poderá mais consultar a foto do paciente nesta consulta. O agendamento continuará válido.</p>
+        {error && <Notice kind="error">{error}</Notice>}
+        <div className="flex flex-wrap justify-end gap-2">
+          <button className="btn btn-secondary" disabled={busy} onClick={() => setPhotoTarget(null)}>Voltar</button>
+          <button className="btn btn-danger" disabled={busy} onClick={() => void revokePhoto()}>Revogar autorização</button>
+        </div>
+      </Modal>
       <Modal open={Boolean(target)} title="Cancelar consulta?" onClose={() => setTarget(null)}>
         {target && (
           <div className="space-y-4">

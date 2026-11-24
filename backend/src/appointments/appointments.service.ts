@@ -84,7 +84,8 @@ export class AppointmentsService {
       result.serviceId !== dto.serviceId ||
       result.professionalId !== dto.professionalId ||
       result.clinicId !== dto.clinicId ||
-      result.slotId !== dto.slotId
+      result.slotId !== dto.slotId ||
+      (result.sharePatientPhoto === true) !== (dto.sharePatientPhoto === true)
     ) {
       throw new ConflictException({
         code: 'IDEMPOTENCY_KEY_REUSED',
@@ -219,6 +220,8 @@ async listForUser(
       clinicAddressSnapshot: true,
       dependentCheckResult: true,
       dependentCheckedAt: true,
+      photoConsentAt: true,
+      photoConsentRevokedAt: true,
 
       // Para conferir o vínculo na recepção, o médico precisa do nome do responsável.
       holder: { select: { name: true } },
@@ -244,8 +247,10 @@ async listForUser(
     },
   });
 
-  return rows.map(({ patient, holder, ...appointment }) => ({
+  return rows.map(({ patient, holder, photoConsentAt, photoConsentRevokedAt, ...appointment }) => ({
     ...appointment,
+    ...(photoConsentAt && !photoConsentRevokedAt && appointment.status === AppointmentStatus.CONFIRMED && appointment.slot.endsAt > now
+      ? { photoShared: true } : {}),
     patient: {
       name: patient.name,
       relationship: patient.relationship,
@@ -254,6 +259,39 @@ async listForUser(
     },
   }));
 }
+  /** Only the assigned, active and approved doctor can read the current photo.
+   * No public URL, no access after scheduled end/cancellation/revocation. */
+  async readSharedPatientPhoto(userId: string, appointmentId: string) {
+    const appointment = await this.prisma.appointment.findFirst({
+      where: {
+        id: appointmentId,
+        professional: { userId, verificationStatus: 'APPROVED', user: { status: 'ACTIVE' } },
+        holder: { status: 'ACTIVE' },
+        status: AppointmentStatus.CONFIRMED,
+        slot: { endsAt: { gt: new Date() } },
+        photoConsentAt: { not: null },
+        photoConsentRevokedAt: null,
+        patient: { deletedAt: null },
+      },
+      select: { patient: { select: { photo: { select: { bytes: true } } } } },
+    });
+    if (!appointment?.patient.photo) throw new NotFoundException('Foto não disponível.');
+    return { base64: Buffer.from(appointment.patient.photo.bytes).toString('base64') };
+  }
+
+  async revokeSharedPatientPhoto(holderId: string, appointmentId: string) {
+    const updated = await this.prisma.appointment.updateMany({
+      where: { id: appointmentId, holderId, photoConsentAt: { not: null }, photoConsentRevokedAt: null },
+      data: { photoConsentRevokedAt: new Date() },
+    });
+    if (!updated.count) {
+      const existing = await this.prisma.appointment.findFirst({
+        where: { id: appointmentId, holderId }, select: { id: true },
+      });
+      if (!existing) throw new NotFoundException('Agendamento não encontrado.');
+    }
+  }
+
 async cancelByPatient(
   holderId: string,
   appointmentId: string,
@@ -665,6 +703,7 @@ async cancelByProfessional(
               clinicId: dto.clinicId,
               slotId: dto.slotId,
               status: 'CONFIRMED',
+              ...(dto.sharePatientPhoto === true && { photoConsentAt: new Date() }),
               serviceNameSnapshot: service.name,
               serviceDurationMinutesSnapshot: service.durationMinutes,
               serviceModalitySnapshot: service.modality,
@@ -690,6 +729,7 @@ async cancelByProfessional(
             professionalName: professional.name,
             clinicName: clinic.name,
             createdAt: appointment.createdAt.toISOString(),
+            ...(dto.sharePatientPhoto === true && { sharePatientPhoto: true }),
           };
 
           await this.outbox.emitOutbox(

@@ -53,6 +53,8 @@ describe('AppointmentsService — confirmação transacional G2', () => {
 
   const findAttempt = jest.fn();
 const findAppointments = jest.fn();
+const findSharedPhoto = jest.fn();
+const revokePhoto = jest.fn();
 const findAppointmentForCancellation = jest.fn();
 const updateAppointmentForCancellation = jest.fn();
 const findCancelledAppointment = jest.fn();
@@ -76,6 +78,8 @@ const transaction = jest.fn();
 const prisma = {
   appointment: {
     findMany: findAppointments,
+    findFirst: findSharedPhoto,
+    updateMany: revokePhoto,
   },
   idempotencyKey: {
     findUnique: findAttempt,
@@ -280,6 +284,41 @@ findCancelledAppointment.mockResolvedValue({
       },
     });
     expect(transaction).toHaveBeenCalledTimes(1);
+  });
+
+  it('registra autorização de foto apenas quando marcada e protege a repetição idempotente', async () => {
+    await service.create('holder-id', { ...dto, sharePatientPhoto: true }, 'photo-key');
+    expect(createAppointment).toHaveBeenCalledWith(expect.objectContaining({
+      data: expect.objectContaining({ photoConsentAt: expect.any(Date) }),
+    }));
+    findAttempt.mockResolvedValue({ result: { ...result, sharePatientPhoto: true } });
+    await expect(service.create('holder-id', dto, 'photo-key')).rejects.toBeInstanceOf(ConflictException);
+  });
+
+  it('restringe consulta da foto ao médico aprovado, atendimento ativo e autorização não revogada', async () => {
+    findSharedPhoto.mockResolvedValue({ patient: { photo: { bytes: Buffer.from('photo') } } });
+    await expect(service.readSharedPatientPhoto('doctor-id', 'appointment-id')).resolves.toEqual({ base64: 'cGhvdG8=' });
+    expect(findSharedPhoto).toHaveBeenCalledWith(expect.objectContaining({
+      where: expect.objectContaining({
+        id: 'appointment-id', professional: { userId: 'doctor-id', verificationStatus: 'APPROVED', user: { status: 'ACTIVE' } },
+        status: 'CONFIRMED', photoConsentAt: { not: null }, photoConsentRevokedAt: null,
+        slot: { endsAt: { gt: expect.any(Date) } }, patient: { deletedAt: null }, holder: { status: 'ACTIVE' },
+      }),
+    }));
+    findSharedPhoto.mockResolvedValue(null);
+    await expect(service.readSharedPatientPhoto('other-doctor', 'appointment-id')).rejects.toBeInstanceOf(NotFoundException);
+  });
+
+  it('revoga autorização somente para agendamento da própria conta', async () => {
+    revokePhoto.mockResolvedValue({ count: 1 });
+    await service.revokeSharedPatientPhoto('holder-id', 'appointment-id');
+    expect(revokePhoto).toHaveBeenCalledWith({
+      where: { id: 'appointment-id', holderId: 'holder-id', photoConsentAt: { not: null }, photoConsentRevokedAt: null },
+      data: { photoConsentRevokedAt: expect.any(Date) },
+    });
+    revokePhoto.mockResolvedValue({ count: 0 });
+    findSharedPhoto.mockResolvedValue(null);
+    await expect(service.revokeSharedPatientPhoto('other-holder', 'appointment-id')).rejects.toBeInstanceOf(NotFoundException);
   });
 
   it('devolve resultado anterior da mesma chave sem gravar duas vezes', async () => {

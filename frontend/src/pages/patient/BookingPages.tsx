@@ -299,29 +299,34 @@ export function BookingReviewPage() {
   const patients = useApi<{ data: Patient[] }>('/patients');
   const [patientId, setPatientId] = useState('');
   const [agree, setAgree] = useState(false);
+  const [photoPatient, setPhotoPatient] = useState<string | null>(null);
   const [error, setError] = useState('');
   const [busy, setBusy] = useState(false);
   // A mesma chave em todas as tentativas desta tela: clique duplo não duplica.
-  const idempotencyKey = useRef(newIdempotencyKey());
+  const idempotencyKeys = useRef(new Map<string, string>());
 
   if (!booking) return <Navigate to="/buscar" replace />;
   const selected = patientId || patients.data?.data[0]?.id || '';
   const selectedPatient = patients.data?.data.find((item) => item.id === selected);
 
   async function confirm() {
-    if (!booking) return;
+    if (!booking || !agree || !selectedPatient || busy) return;
+    const sharePatientPhoto = Boolean(selectedPatient.photoVersion && photoPatient === selected);
+    const attempt = selected + ':' + sharePatientPhoto;
+    if (!idempotencyKeys.current.has(attempt)) idempotencyKeys.current.set(attempt, newIdempotencyKey());
     setBusy(true);
     setError('');
     try {
       await request('/appointments', {
         method: 'POST',
-        headers: { 'Idempotency-Key': idempotencyKey.current },
+        headers: { 'Idempotency-Key': idempotencyKeys.current.get(attempt)! },
         body: jsonBody({
           patientId: selected,
           serviceId: booking.service.id,
           professionalId: booking.professional.id,
           clinicId: booking.clinic.id,
           slotId: booking.slot.id,
+          sharePatientPhoto,
         }),
       });
       navigate('/agendado', { replace: true, state: { ...booking, patientName: selectedPatient?.name } });
@@ -356,7 +361,8 @@ export function BookingReviewPage() {
                   name="paciente"
                   className="size-5 accent-[var(--color-primary)]"
                   checked={patient.id === selected}
-                  onChange={() => setPatientId(patient.id)}
+                  disabled={busy}
+                  onChange={() => { setPatientId(patient.id); setAgree(false); setPhotoPatient(null); }}
                 />
                 <span>
                   <strong>{patient.name}</strong>
@@ -380,12 +386,15 @@ export function BookingReviewPage() {
 
       <div className="card space-y-3">
         <Notice kind="info">
-          O médico verá apenas o <strong>nome e a idade</strong> do paciente. Você pode cancelar pelo app antes da consulta.
+          O médico verá o <strong>nome e a idade</strong> do paciente. O compartilhamento da foto é opcional.
         </Notice>
         <Checkbox checked={agree} onChange={setAgree}>
           Confirmo os dados acima e autorizo o compartilhamento do nome e da idade do paciente com o médico escolhido.
         </Checkbox>
-        <button className="btn btn-primary w-full text-lg" disabled={!agree || busy || !selected} onClick={() => void confirm()}>
+        {selectedPatient?.photoVersion && <Checkbox checked={photoPatient === selected} onChange={(checked) => { if (!busy) setPhotoPatient(checked ? selected : null); }}>
+          Autorizo o médico desta consulta a ver a foto de perfil atual do paciente, inclusive se for substituída, até o fim previsto do atendimento. Posso revogar na agenda.
+        </Checkbox>}
+        <button className="btn btn-primary w-full text-lg" disabled={!agree || busy || !selectedPatient} onClick={() => void confirm()}>
           <CalendarCheck className="size-5" /> {busy ? 'Confirmando...' : 'Confirmar agendamento'}
         </button>
       </div>
