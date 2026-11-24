@@ -147,6 +147,13 @@ async cancel(
       data: appointment,
     };
   }
+  @Patch(':id/attendance')
+  @Roles(UserRole.PROFESSIONAL)
+  @ApiOperation({ summary: 'Registrar presença do paciente' })
+  async attendance(@CurrentUser() user: AuthenticatedUser, @Param('id', ParseUUIDPipe) id: string) {
+    return { data: await this.appointmentsService.recordAttendance(user.id, id) };
+  }
+
   @Patch(':id/complete')
 @Roles(UserRole.PROFESSIONAL)
 @ApiOperation({

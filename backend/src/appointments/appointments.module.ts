@@ -8,6 +8,7 @@ import { NotificationsModule } from '../notifications/notifications.module';
 import { PatientsModule } from '../patients/patients.module';
 import { AppointmentsController } from './appointments.controller';
 import { AppointmentsService } from './appointments.service';
+import { AppointmentExpirationService } from './appointment-expiration.service';
 
 @Module({
   imports: [
@@ -20,6 +21,6 @@ import { AppointmentsService } from './appointments.service';
     NotificationsModule,
   ],
   controllers: [AppointmentsController],
-  providers: [AppointmentsService],
+  providers: [AppointmentsService, AppointmentExpirationService],
 })
 export class AppointmentsModule {}

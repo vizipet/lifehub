@@ -386,7 +386,7 @@ export function BookingReviewPage() {
 
       <div className="card space-y-3">
         <Notice kind="info">
-          O médico verá o <strong>nome e a idade</strong> do paciente. O compartilhamento da foto é opcional.
+          O médico verá o <strong>nome e a idade</strong> do paciente. O compartilhamento da foto é opcional. Sem presença registrada até 30 minutos após o término previsto, a consulta será cancelada automaticamente.
         </Notice>
         <Checkbox checked={agree} onChange={setAgree}>
           Confirmo os dados acima e autorizo o compartilhamento do nome e da idade do paciente com o médico escolhido.

@@ -30,6 +30,7 @@ import {
   AppointmentListView,
   type ListAppointmentsQueryDto,
 } from './list-appointments-query.dto';
+import { ATTENDANCE_GRACE_MS, ATTENDANCE_EARLY_MS, expiredWithoutAttendance, AUTO_CANCELLATION_REASON } from './appointment-expiration.service';
 const CREATE_APPOINTMENT_OPERATION = 'CREATE_APPOINTMENT';
 
 @Injectable()
@@ -136,6 +137,11 @@ async listForUser(
 
   const now = new Date();
 
+  // Reconcile this agenda even if the periodic job has not run yet.
+  await this.prisma.appointment.updateMany({
+    where: { AND: [scope, expiredWithoutAttendance(now)] },
+    data: { status: 'CANCELLED_AUTOMATICALLY', cancelledAt: now, cancellationReason: AUTO_CANCELLATION_REASON },
+  });
   let viewFilter: Prisma.AppointmentWhereInput;
 
   switch (view) {
@@ -145,6 +151,7 @@ async listForUser(
           in: [
             AppointmentStatus.CANCELLED_BY_PATIENT,
             AppointmentStatus.CANCELLED_BY_PROVIDER,
+            AppointmentStatus.CANCELLED_AUTOMATICALLY,
           ],
         },
       };
@@ -156,6 +163,7 @@ async listForUser(
           notIn: [
             AppointmentStatus.CANCELLED_BY_PATIENT,
             AppointmentStatus.CANCELLED_BY_PROVIDER,
+            AppointmentStatus.CANCELLED_AUTOMATICALLY,
           ],
         },
         slot: {
@@ -220,6 +228,7 @@ async listForUser(
       clinicAddressSnapshot: true,
       dependentCheckResult: true,
       dependentCheckedAt: true,
+      attendanceRecordedAt: true,
       photoConsentAt: true,
       photoConsentRevokedAt: true,
 
@@ -531,6 +540,30 @@ async cancelByProfessional(
     });
   });
 }
+  async recordAttendance(userId: string, appointmentId: string) {
+    const professional = await this.professionalsService.findMine(userId);
+    const now = new Date();
+    const updated = await this.prisma.appointment.updateMany({
+      where: {
+        id: appointmentId, professionalId: professional.id, status: AppointmentStatus.CONFIRMED,
+        attendanceRecordedAt: null,
+        slot: { startsAt: { lte: new Date(now.getTime() + ATTENDANCE_EARLY_MS) },
+          endsAt: { gt: new Date(now.getTime() - ATTENDANCE_GRACE_MS) } },
+      },
+      data: { attendanceRecordedAt: now },
+    });
+    if (!updated.count) {
+      const existing = await this.prisma.appointment.findFirst({
+        where: { id: appointmentId, professionalId: professional.id },
+        select: { status: true, attendanceRecordedAt: true },
+      });
+      if (!existing) throw new NotFoundException('Agendamento não encontrado.');
+      if (existing.status !== AppointmentStatus.CONFIRMED || !existing.attendanceRecordedAt)
+        throw new ConflictException('Presença só pode ser registrada de 15 minutos antes até 30 minutos depois do atendimento.');
+    }
+    return { attendanceRecorded: true };
+  }
+
   async completeByProfessional(
     userId: string,
     appointmentId: string,
@@ -552,6 +585,7 @@ async cancelByProfessional(
             professionalId: true,
             status: true,
             dependentCheckResult: true,
+            attendanceRecordedAt: true,
             patient: { select: { relationship: true } },
             slot: {
               select: {
@@ -596,6 +630,11 @@ async cancelByProfessional(
           message:
             'A consulta só pode ser concluída após o horário previsto.',
         });
+      }
+
+      if (!appointment.attendanceRecordedAt && appointment.dependentCheckResult !== 'CONFIRMED' &&
+          appointment.slot.endsAt.getTime() + ATTENDANCE_GRACE_MS <= now.getTime()) {
+        throw new ConflictException('Prazo encerrado sem presença registrada.');
       }
 
       const updated =

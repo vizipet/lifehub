@@ -133,6 +133,7 @@ const availabilityService = {
   jest.clearAllMocks();
 
   findAppointments.mockResolvedValue([]);
+  revokePhoto.mockResolvedValue({ count: 0 });
 
   findMine.mockResolvedValue({
     id: 'professional-profile-id',
@@ -487,6 +488,7 @@ describe('listForUser', () => {
               notIn: [
                 AppointmentStatus.CANCELLED_BY_PATIENT,
                 AppointmentStatus.CANCELLED_BY_PROVIDER,
+                AppointmentStatus.CANCELLED_AUTOMATICALLY,
               ],
             },
             slot: {
@@ -526,6 +528,7 @@ describe('listForUser', () => {
               in: [
                 AppointmentStatus.CANCELLED_BY_PATIENT,
                 AppointmentStatus.CANCELLED_BY_PROVIDER,
+                AppointmentStatus.CANCELLED_AUTOMATICALLY,
               ],
             },
           },
@@ -978,6 +981,7 @@ describe('completeByProfessional', () => {
       professionalId: 'professional-profile-id',
       status: AppointmentStatus.CONFIRMED,
       dependentCheckResult: null,
+      attendanceRecordedAt: new Date('2020-01-01T12:00:00.000Z'),
       patient: { relationship: 'SELF' },
       slot: {
         endsAt: new Date(
@@ -1018,6 +1022,7 @@ describe('completeByProfessional', () => {
         professionalId: true,
         status: true,
         dependentCheckResult: true,
+        attendanceRecordedAt: true,
         patient: { select: { relationship: true } },
         slot: {
           select: {

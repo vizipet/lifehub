@@ -3,7 +3,7 @@ export type VerificationStatus = 'PENDING' | 'APPROVED' | 'CHANGES_REQUESTED' | 
 export type Modality = 'IN_PERSON' | 'REMOTE';
 export type Sex = 'FEMALE' | 'MALE' | 'OTHER' | 'NOT_INFORMED';
 export type Relationship = 'SELF' | 'CHILD' | 'SPOUSE' | 'PARENT' | 'SIBLING' | 'GRANDPARENT' | 'OTHER';
-export type AppointmentStatus = 'CONFIRMED' | 'CANCELLED_BY_PATIENT' | 'CANCELLED_BY_PROVIDER' | 'COMPLETED';
+export type AppointmentStatus = 'CONFIRMED' | 'CANCELLED_BY_PATIENT' | 'CANCELLED_BY_PROVIDER' | 'CANCELLED_AUTOMATICALLY' | 'COMPLETED';
 
 export interface User {
   id: string;
@@ -101,6 +101,7 @@ export interface Appointment {
   dependentCheckResult?: 'CONFIRMED' | 'MISMATCH' | null;
   dependentCheckedAt?: string | null;
   photoShared?: boolean;
+  attendanceRecordedAt?: string | null;
 }
 
 export interface Campaign {

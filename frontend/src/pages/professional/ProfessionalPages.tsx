@@ -29,11 +29,13 @@ function appointmentStatusForDoctor(status: Appointment['status']) {
     COMPLETED: 'Concluído',
     CANCELLED_BY_PATIENT: 'Cancelado pelo paciente',
     CANCELLED_BY_PROVIDER: 'Cancelado por você',
+    CANCELLED_AUTOMATICALLY: 'Cancelado automaticamente',
   }[status];
 }
 
 const MODAL_TITLES = {
   complete: 'Concluir atendimento?',
+  attendance: 'Registrar presença?',
   cancel: 'Cancelar atendimento?',
   confirmLink: 'Vínculo conferido?',
   mismatch: 'Vínculo não confere',
@@ -84,11 +86,20 @@ export function ProfessionalDashboard() {
   // "Em aberto": confirmadas ainda não concluídas, inclusive as que já começaram.
   const [agendaView, setAgendaView] = useState<'open' | 'past' | 'cancelled'>('open');
   const agenda = useApi<{ data: Appointment[] }>(pro.profile ? `/appointments?view=${agendaView}` : null);
-  const [target, setTarget] = useState<{ appointment: Appointment; action: 'complete' | 'cancel' | 'confirmLink' | 'mismatch' } | null>(null);
+  const [target, setTarget] = useState<{ appointment: Appointment; action: 'complete' | 'attendance' | 'cancel' | 'confirmLink' | 'mismatch' } | null>(null);
   const [reason, setReason] = useState('');
   const [error, setError] = useState('');
   const [busy, setBusy] = useState(false);
   const [leavingId, setLeavingId] = useState<string | null>(null);
+
+  const reloadAgenda = agenda.reload;
+  useEffect(() => {
+    if (!pro.profile) return;
+    const refresh = () => reloadAgenda({ quiet: true });
+    const timer = window.setInterval(refresh, 30000);
+    window.addEventListener('focus', refresh);
+    return () => { window.clearInterval(timer); window.removeEventListener('focus', refresh); };
+  }, [pro.profile?.id, reloadAgenda]);
 
   const approved = pro.profile?.verificationStatus === 'APPROVED';
   const approvedClinic = pro.clinics.some((clinic) => clinic.verificationStatus === 'APPROVED');
@@ -98,7 +109,9 @@ export function ProfessionalDashboard() {
     setBusy(true);
     setError('');
     try {
-      if (target.action === 'complete') {
+      if (target.action === 'attendance') {
+        await request(`/appointments/${target.appointment.id}/attendance`, { method: 'PATCH' });
+      } else if (target.action === 'complete') {
         await request(`/appointments/${target.appointment.id}/complete`, { method: 'PATCH' });
       } else if (target.action === 'confirmLink' || target.action === 'mismatch') {
         await request(`/appointments/${target.appointment.id}/dependent-check`, {
@@ -115,7 +128,7 @@ export function ProfessionalDashboard() {
       const { appointment, action } = target;
       setTarget(null);
       // Concluir, cancelar ou "não confere" tiram a consulta da lista: o cartão some suavemente.
-      if (action === 'confirmLink') {
+      if (action === 'confirmLink' || action === 'attendance') {
         agenda.reload({ quiet: true });
       } else {
         setLeavingId(appointment.id);
@@ -197,6 +210,7 @@ export function ProfessionalDashboard() {
                       {item.patient.age} anos · {relationshipLabel[item.patient.relationship] === 'Titular' ? 'titular' : 'dependente'} · {item.serviceNameSnapshot} ({modalityLabel[item.serviceModalitySnapshot]})
                     </p>
                     <p className="text-sm text-muted">{dateLong(item.slot.startsAt)} · {item.clinicNameSnapshot}</p>
+                    {item.status === 'CONFIRMED' && (item.attendanceRecordedAt || item.dependentCheckResult === 'CONFIRMED') && <p className="text-sm text-success">Presença registrada</p>}
                   </div>
                   {agendaView !== 'open' ? (
                     <StatusPill tone={item.status === 'COMPLETED' ? 'green' : item.status === 'CONFIRMED' ? 'yellow' : 'gray'}>
@@ -204,6 +218,9 @@ export function ProfessionalDashboard() {
                     </StatusPill>
                   ) : (
                   <div className="flex gap-2">
+                    {!item.attendanceRecordedAt && item.dependentCheckResult !== 'CONFIRMED' && Date.now() >= Date.parse(item.slot.startsAt) - 15 * 60000 && Date.now() < Date.parse(item.slot.endsAt) + 30 * 60000 && (
+                      <button className="btn btn-secondary" onClick={() => { setError(''); setTarget({ appointment: item, action: 'attendance' }); }}>Registrar presença</button>
+                    )}
                     {needsLinkCheck(item) ? (
                       <Tooltip text="Confira o vínculo do dependente antes.">
                         <button className="btn btn-secondary" disabled>Concluir</button>
@@ -261,6 +278,7 @@ export function ProfessionalDashboard() {
             <p>
               {target.appointment.patient.name}, <span>{dateLong(target.appointment.slot.startsAt)}</span> às {time(target.appointment.slot.startsAt)}.
             </p>
+            {target.action === 'attendance' && <Notice kind="info">Confirme somente se o paciente compareceu ao atendimento. Isso evita o cancelamento automático.</Notice>}
             {target.action === 'confirmLink' && (
               <Notice kind="info">
                 Confirma que conferiu o documento de <strong>{target.appointment.patient.guardianName}</strong> e o documento de{' '}
