@@ -15,6 +15,7 @@ describe('AvailabilityService', () => {
       findFirst: jest.fn(),
       create: jest.fn(),
       updateMany: jest.fn(),
+      deleteMany: jest.fn(),
       findUniqueOrThrow: jest.fn(),
     },
     professional: { findUnique: jest.fn() },
@@ -69,6 +70,21 @@ describe('AvailabilityService', () => {
       clinicId: 'clinic-id',
       durationMinutes: 30,
     });
+  });
+
+  it('exclui apenas horário futuro próprio sem histórico', async () => {
+    prisma.availabilitySlot.deleteMany.mockResolvedValue({ count: 1 });
+    await service.deleteMine('clinic-id', 'slot-id', 'user-id');
+    expect(prisma.availabilitySlot.deleteMany).toHaveBeenCalledWith({ where: {
+      id: 'slot-id', clinicId: 'clinic-id', professionalId: 'professional-id',
+      status: { in: [AvailabilityStatus.AVAILABLE, AvailabilityStatus.BLOCKED] },
+      startsAt: { gt: expect.any(Date) }, appointments: { none: {} },
+    } });
+  });
+
+  it('recusa excluir horário reservado, passado, alheio ou com histórico', async () => {
+    prisma.availabilitySlot.deleteMany.mockResolvedValue({ count: 0 });
+    await expect(service.deleteMine('clinic-id', 'slot-id', 'user-id')).rejects.toBeInstanceOf(ConflictException);
   });
 
   it('deve ser definido', () => {

@@ -320,6 +320,32 @@ export class AvailabilityService {
     });
   }
 
+  /** Exclui somente horários futuros próprios que nunca tiveram agendamento. */
+  async deleteMine(clinicId: string, slotId: string, userId: string) {
+    await this.clinicsService.findMineById(clinicId, userId);
+    const professionalId = await this.professionalIdOf(userId);
+    return this.prisma.$transaction(async (tx) => {
+      const result = await tx.availabilitySlot.deleteMany({
+        where: {
+          id: slotId, clinicId, professionalId,
+          status: { in: [AvailabilityStatus.AVAILABLE, AvailabilityStatus.BLOCKED] },
+          startsAt: { gt: new Date() },
+          appointments: { none: {} },
+        },
+      });
+      if (result.count !== 1) {
+        throw new ConflictException({
+          code: 'SLOT_NOT_DELETABLE',
+          message: 'Somente horários futuros livres ou bloqueados, sem histórico de consultas, podem ser excluídos.',
+        });
+      }
+      await this.audit.record({
+        actorId: userId, action: 'SLOT_DELETED', entityType: 'AVAILABILITY_SLOT',
+        entityId: slotId, details: { clinicId },
+      }, tx);
+    });
+  }
+
   /** Volta um horário bloqueado (do próprio médico) para disponível. */
   async unblockMine(clinicId: string, slotId: string, userId: string) {
     await this.clinicsService.findMineById(clinicId, userId);

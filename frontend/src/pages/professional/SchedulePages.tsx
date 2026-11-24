@@ -206,6 +206,8 @@ export function SlotsPage() {
   const [error, setError] = useState('');
   const [message, setMessage] = useState('');
   const [busy, setBusy] = useState(false);
+  const [deleting, setDeleting] = useState<{ slot: Slot; clinicId: string } | null>(null);
+  const [deleteError, setDeleteError] = useState('');
 
   const activeServices = services.data?.data.filter((item) => item.isActive !== false) ?? [];
   const service = activeServices.find((item) => item.id === gen.serviceId) ?? activeServices[0];
@@ -239,6 +241,18 @@ export function SlotsPage() {
     }
   }
 
+  async function deleteSlot() {
+    if (!deleting || busy) return;
+    setBusy(true); setDeleteError(''); setError(''); setMessage('');
+    try {
+      await request(`/clinics/${deleting.clinicId}/availability/${deleting.slot.id}`, { method: 'DELETE' });
+      setDeleting(null);
+      setMessage('Horário excluído.');
+      slots.reload();
+    } catch (err) { setDeleteError(messageOf(err)); }
+    finally { setBusy(false); }
+  }
+
   async function setBlocked(slot: Slot, block: boolean) {
     setError('');
     try {
@@ -251,7 +265,7 @@ export function SlotsPage() {
 
   return (
     <div className="space-y-4">
-      <PageHeader title="Horários" subtitle="Abra horários em lote e bloqueie quando precisar." />
+      <PageHeader title="Horários" subtitle="Abra, bloqueie ou exclua horários quando precisar." />
       <div className="card"><ClinicPicker value={clinicId} onChange={setClinicId} /></div>
       {message && <Notice kind="success">{message}</Notice>}
       {error && <Notice kind="error">{error}</Notice>}
@@ -320,6 +334,11 @@ export function SlotsPage() {
                               <button className="ml-1 rounded p-1 hover:bg-soft" aria-label={`Liberar ${time(slot.startsAt)}`} onClick={() => void setBlocked(slot, false)}><Unlock className="size-4" /></button>
                             </Tooltip>
                           )}
+                          {(slot.status === 'AVAILABLE' || slot.status === 'BLOCKED') && Date.parse(slot.startsAt) > Date.now() && (
+                            <Tooltip text="Excluir horário sem histórico de consultas.">
+                              <button type="button" className="ml-1 rounded p-1 text-danger hover:bg-soft" disabled={busy} aria-label={`Excluir ${time(slot.startsAt)}`} onClick={() => { setDeleteError(''); setDeleting({ slot, clinicId }); }}><Trash2 className="size-4" /></button>
+                            </Tooltip>
+                          )}
                         </span>
                       ))}
                     </div>
@@ -331,6 +350,17 @@ export function SlotsPage() {
           </section>
         </div>
       )}
+      <Modal open={Boolean(deleting)} title="Excluir horário?" onClose={() => { if (!busy) setDeleting(null); }}>
+        {deleting && <div className="space-y-3">
+          <p>Excluir o horário de <strong>{dateLong(deleting.slot.startsAt)}, {time(deleting.slot.startsAt)}–{time(deleting.slot.endsAt)}</strong>?</p>
+          <p className="text-sm text-muted">Somente horários sem consultas ou histórico podem ser excluídos. A exclusão libera o intervalo para novos horários.</p>
+          {deleteError && <Notice kind="error">{deleteError}</Notice>}
+          <div className="flex justify-end gap-2">
+            <button className="btn btn-secondary" disabled={busy} onClick={() => setDeleting(null)}>Voltar</button>
+            <button className="btn btn-danger" disabled={busy} onClick={() => void deleteSlot()}>{busy ? 'Excluindo…' : 'Excluir horário'}</button>
+          </div>
+        </div>}
+      </Modal>
     </div>
   );
 }

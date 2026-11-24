@@ -1,5 +1,7 @@
 import {
   Body,
+  Delete,
+  HttpCode,
   Controller,
   Get,
   Param,
@@ -114,6 +116,17 @@ export class AvailabilityController {
     @Query('to') to?: string,
   ) {
     return { data: await this.availabilityService.listMine(clinicId, user.id, from, to) };
+  }
+
+  @Delete(':slotId')
+  @HttpCode(204)
+  @ApiOperation({ summary: 'Excluir horário futuro sem histórico de consultas' })
+  async deleteMine(
+    @CurrentUser() user: AuthenticatedUser,
+    @Param('clinicId', ParseUUIDPipe) clinicId: string,
+    @Param('slotId', ParseUUIDPipe) slotId: string,
+  ) {
+    await this.availabilityService.deleteMine(clinicId, slotId, user.id);
   }
 
   @Patch(':slotId/unblock')
