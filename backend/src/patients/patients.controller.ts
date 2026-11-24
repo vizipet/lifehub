@@ -9,12 +9,14 @@ import {
   ParseUUIDPipe,
   Patch,
   Post,
+  Put,
   UploadedFile,
   UseGuards,
   UseInterceptors,
 } from '@nestjs/common';
 import { FileInterceptor } from '@nestjs/platform-express';
-import { MAX_PATIENT_PHOTO_BYTES } from './patient-photo';
+import { decodePatientPhotoBase64, MAX_PATIENT_PHOTO_BYTES } from './patient-photo';
+import { UploadPatientPhotoDto } from './upload-patient-photo.dto';
 import {
   ApiBearerAuth,
   ApiCreatedResponse,
@@ -91,6 +93,18 @@ export class PatientsController {
     @UploadedFile() file: { buffer: Buffer; size: number },
     @Body('authorized') authorized: string) {
     return { data: await this.patients.uploadPhoto(id, user.id, file, authorized === 'true') };
+  }
+
+  // JSON transport for Expo Go: no native multipart file-URI dependency.
+  @Put(':id/photo')
+  @ApiOperation({ summary: 'Enviar foto JPEG privada pelo aplicativo móvel' })
+  async uploadPhotoJson(
+    @CurrentUser() user: AuthenticatedUser,
+    @Param('id', ParseUUIDPipe) id: string,
+    @Body() dto: UploadPatientPhotoDto,
+  ) {
+    const buffer = decodePatientPhotoBase64(dto.base64);
+    return { data: await this.patients.uploadPhoto(id, user.id, { buffer, size: buffer.length }, dto.authorized) };
   }
 
   @Delete(':id/photo')

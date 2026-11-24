@@ -1,5 +1,5 @@
 import { BadRequestException } from '@nestjs/common';
-import { MAX_PATIENT_PHOTO_BYTES, validatePatientPhoto } from './patient-photo';
+import { decodePatientPhotoBase64, MAX_PATIENT_PHOTO_BYTES, MAX_PATIENT_PHOTO_JSON_BYTES, validatePatientPhoto } from './patient-photo';
 
 // Synthetic JPEG frame header; tests the size/type/dimension gate (not image decoding).
 function frame(width: number, height: number) {
@@ -23,5 +23,18 @@ describe('Patient photo validation', () => {
   it('rejects unknown file formats and missing images', () => {
     expect(() => validatePatientPhoto({ buffer: Buffer.from('<svg>'), size: 5 })).toThrow(BadRequestException);
     expect(() => validatePatientPhoto()).toThrow(BadRequestException);
+  });
+});
+
+describe('Mobile JSON photo transport', () => {
+  it('decodes a canonical JPEG payload', () => {
+    const file = frame(512, 512);
+    expect(decodePatientPhotoBase64(file.buffer.toString('base64'))).toEqual(file.buffer);
+  });
+  it('rejects malformed base64', () => {
+    expect(() => decodePatientPhotoBase64('not a photo!')).toThrow(BadRequestException);
+  });
+  it('rejects payloads above the mobile limit', () => {
+    expect(() => decodePatientPhotoBase64(Buffer.alloc(MAX_PATIENT_PHOTO_JSON_BYTES + 1).toString('base64'))).toThrow(BadRequestException);
   });
 });

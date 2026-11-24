@@ -30,3 +30,18 @@ export function validatePatientPhoto(file?: { buffer: Buffer; size: number }): B
   }
   throw new BadRequestException('A foto deve ser um JPEG de até 1024 × 1024 pixels.');
 }
+
+// Keep the JSON request below Express's default 100 KB body limit.
+export const MAX_PATIENT_PHOTO_JSON_BYTES = 64 * 1024;
+export const MAX_PATIENT_PHOTO_BASE64_LENGTH = Math.ceil(MAX_PATIENT_PHOTO_JSON_BYTES / 3) * 4;
+
+export function decodePatientPhotoBase64(value: string): Buffer {
+  if (typeof value !== 'string' || !value || value.length > MAX_PATIENT_PHOTO_BASE64_LENGTH) {
+    throw new BadRequestException('A foto é muito grande ou inválida.');
+  }
+  const buffer = Buffer.from(value, 'base64');
+  if (!buffer.length || buffer.length > MAX_PATIENT_PHOTO_JSON_BYTES || buffer.toString('base64') !== value) {
+    throw new BadRequestException('A foto é muito grande ou inválida.');
+  }
+  return buffer;
+}
