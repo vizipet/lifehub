@@ -445,11 +445,10 @@ describe('listForUser', () => {
           },
           {
             status: AppointmentStatus.CONFIRMED,
-            slot: {
-              startsAt: {
-                gt: expect.any(Date),
-              },
-            },
+            OR: [
+              { slot: { startsAt: { gt: expect.any(Date) } } },
+              { serviceModalitySnapshot: 'REMOTE', slot: { endsAt: { gt: expect.any(Date) } } },
+            ],
           },
         ],
       },
